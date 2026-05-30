@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="简介boost.asio是boost中的一个基于事件的网络库。本文将介绍asio的多线程模型。asio有两种支持多线程的方案：方案一，开启一个线程池，每个线程独占一个io_context，并在各自的线程中运行io_context的run方法；方案二，开启一个线程池，并创建一个全局的io_context，在每个线程中调用io_context的run方法。备注：新版本的asio使用io_context">
+<meta property="og:type" content="article">
+<meta property="og:title" content="asio_multithread">
+<meta property="og:url" content="https://phantom9999.github.io/posts/aef5c1c6.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="简介boost.asio是boost中的一个基于事件的网络库。本文将介绍asio的多线程模型。asio有两种支持多线程的方案：方案一，开启一个线程池，每个线程独占一个io_context，并在各自的线程中运行io_context的run方法；方案二，开启一个线程池，并创建一个全局的io_context，在每个线程中调用io_context的run方法。备注：新版本的asio使用io_context">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2020-02-01T10:50:43.000Z">
+<meta property="article:modified_time" content="2020-02-01T10:50:43.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="开发, cpp, c++, 研发, 搜广推, 搜索, 广告, 推荐">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/aef5c1c6.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/aef5c1c6.html","path":"posts/aef5c1c6.html","title":"asio_multithread"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>asio_multithread | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%A4%9Aio-context%E6%96%B9%E6%A1%88"><span class="nav-number">2.</span> <span class="nav-text">多io_context方案</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E7%8E%B0"><span class="nav-number">2.1.</span> <span class="nav-text">实现</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%85%B1%E4%BA%ABio-context%E6%96%B9%E6%A1%88"><span class="nav-number">3.</span> <span class="nav-text">共享io_context方案</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E7%8E%B0-1"><span class="nav-number">3.1.</span> <span class="nav-text">实现</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%A7%E8%83%BD%E6%AF%94%E8%BE%83"><span class="nav-number">4.</span> <span class="nav-text">性能比较</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%8F%82%E8%80%83"><span class="nav-number">5.</span> <span class="nav-text">参考</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/aef5c1c6.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="asio_multithread | phantom9999的博客">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          asio_multithread
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2020-02-01 10:50:43" itemprop="dateCreated datePublished" datetime="2020-02-01T10:50:43+00:00">2020-02-01</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/cpp-devel/" itemprop="url" rel="index"><span itemprop="name">cpp-devel</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>boost.asio是boost中的一个基于事件的网络库。本文将介绍asio的多线程模型。<br>asio有两种支持多线程的方案：方案一，开启一个线程池，每个线程独占一个io_context，并在各自的线程中运行io_context的run方法；方案二，开启一个线程池，并创建一个全局的io_context，在每个线程中调用io_context的run方法。<br>备注：新版本的asio使用io_context代替io_servvice。</p>
+<h1 id="多io-context方案"><a href="#多io-context方案" class="headerlink" title="多io_context方案"></a>多io_context方案</h1><p>在这个多线程方案中，每个线程拥有一个io_context对象，同一个socket不会在多线程中共享，因此不需要引入同步机制。针对io型服务来说，io_context的数量应与cpu数量保持一致；针对计算型服务，请求阻塞了当前线程，当前线程将无法处理其他事件。</p>
+<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><p>接着我们来讲一讲这个方案的实现。<br>为了实现线程池中每个线程拥有一个io_context对象，我们需要先实现一个context池，然后供线程池和其他操作使用。幸运的是，asio代码库的example中提供了这样一个<span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL2Jvb3N0b3JnL2FzaW8vdHJlZS9kZXZlbG9wL2V4YW1wbGUvY3BwMDMvaHR0cC9zZXJ2ZXIy">例子<i class="fa fa-external-link-alt"></i></span>。io_context_pool类即是上文提到的context池，其申明如下:</p>
+<pre class="line-numbers language-none"><code class="language-none">class io_context_pool : private boost::noncopyable &#123;
+public:
+  explicit io_context_pool(std::size_t pool_size);
+  void run();
+  void stop();
+  boost::asio::io_context&amp; get_io_context();
+
+private:
+  typedef boost::shared_ptr&lt;boost::asio::io_context&gt; io_context_ptr;
+  typedef boost::asio::executor_work_guard&lt;
+    boost::asio::io_context::executor_type&gt; io_context_work;
+
+  std::vector&lt;io_context_ptr&gt; io_contexts_;
+
+  std::list&lt;io_context_work&gt; work_;
+
+  std::size_t next_io_context_;
+&#125;;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>这个类中提供了三个方法：</p>
+<ul>
+<li>run方法，创建线程池并在每个线程中运行io_context的run方法</li>
+<li>stop方法，停用所有io_context</li>
+<li>get_io_context方法，使用roundrobin算法获取io_context对象</li>
+</ul>
+<p>接着io_context_pool类对象作为server类的成员变量，在start_accept函数和构造函数中使用。server类的声明如下: </p>
+<pre class="line-numbers language-none"><code class="language-none">class server : private boost::noncopyable &#123;
+public:
+  explicit server(const std::string&amp; address, const std::string&amp; port, const std::string&amp; doc_root, std::size_t io_context_pool_size);
+  void run();
+
+private:
+  void start_accept();
+  void handle_accept(const boost::system::error_code&amp; e);
+  void handle_stop();
+  io_context_pool io_context_pool_;
+  boost::asio::signal_set signals_;
+  boost::asio::ip::tcp::acceptor acceptor_;
+  connection_ptr new_connection_;
+  request_handler request_handler_;
+&#125;;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="共享io-context方案"><a href="#共享io-context方案" class="headerlink" title="共享io_context方案"></a>共享io_context方案</h1><p>这种方案先创建一个全局的io_context对象，然后开启线程池，在每个线程中调用io_context的run方法。当出现异步事件时，io_context对象会将事件句柄交付给任意线程进行处理。这时io_context不会被某个事件阻塞，但多个线程共享事件循环可能导致socket描述符被多个线程共享，引起竞态条件，为此需要使用asio提供的strand方法来解决io问题。</p>
+<h2 id="实现-1"><a href="#实现-1" class="headerlink" title="实现"></a>实现</h2><p>这个方案实现起来相对简单，不再需要实现context池，只需要实现一个线程池，并在线程池中执行io_context的run方法即可。在asio库中包含了这个<span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL2Jvb3N0b3JnL2FzaW8vdHJlZS9kZXZlbG9wL2V4YW1wbGUvY3BwMDMvaHR0cC9zZXJ2ZXIz">例子<i class="fa fa-external-link-alt"></i></span>，在线程池中运行全局的io_context的run方法。</p>
+<p>server类的声明如下:</p>
+<pre class="line-numbers language-none"><code class="language-none">class server : private boost::noncopyable &#123;
+public:
+  explicit server(const std::string&amp; address, const std::string&amp; port, const std::string&amp; doc_root, std::size_t thread_pool_size);
+  void run();
+
+private:
+  void start_accept();
+  void handle_accept(const boost::system::error_code&amp; e);
+  void handle_stop();
+  
+  std::size_t thread_pool_size_;
+  boost::asio::io_context io_context_;
+  boost::asio::signal_set signals_;
+  boost::asio::ip::tcp::acceptor acceptor_;
+  connection_ptr new_connection_;
+  request_handler request_handler_;
+&#125;;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>从server类的声明中可以看到，全局的io_context对象存储在io_context_变量中，并在run函数和构造函数中进行使用。</p>
+<h1 id="性能比较"><a href="#性能比较" class="headerlink" title="性能比较"></a>性能比较</h1><p>上面讲了两种方案的实现，这一节做一个简单的性能测试。<br>asio的example提供的两个server实现了基本的http server，本次用于测试的客户端使用brpc的http客户端，进行测试的serer开启六个个线程。这是本次性能测试使用的<span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5L2FzaW9fYmVuY2htYXJrcw==">代码库<i class="fa fa-external-link-alt"></i></span>。<br>测试结果显示，这两种方案的峰值qps都在2w左右，性能差不多。<br>这两个server都会进行文件读写操作，一定程度上影响了测试结果，且本文使用的代码并没有进行优化，这也可能无法正确区分两种方案的性能差异。</p>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><ul>
+<li>[The Boost C++ Libraries Chapter 32. Boost.Asio](The Boost C++ Libraries Chapter 32. Boost.Asio)</li>
+<li><span class="exturl" data-url="aHR0cHM6Ly93d3cuZ2FtZWRldi5uZXQvYmxvZ3MvZW50cnkvMjI0OTMxNy1hLWd1aWRlLXRvLWdldHRpbmctc3RhcnRlZC13aXRoLWJvb3N0YXNpby8=">A guide to getting started with boost::asio<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cDovL3d3dy5ib29zdC5vcmcvZG9jL2xpYnMvMV81OV8wL2RvYy9odG1sL2Jvb3N0X2FzaW8vb3ZlcnZpZXcvY29yZS9zdHJhbmRzLmh0bWw=">Strands: Use Threads Without Explicit Locking<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cDovL3RoaXN0aHJlYWQuYmxvZ3Nwb3QuY29tLzIwMTIvMDQvcG9zdC1vbi1hc2lvLXN0cmFuZC5odG1s">Post on ASIO strand<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly9zdGFja292ZXJmbG93LmNvbS9xdWVzdGlvbnMvMzkwOTc2NDQvaG93LXN0cmFuZHMtZ3VhcmFudGVlLWNvcnJlY3QtZXhlY3V0aW9uLW9mLXBlbmRpbmctZXZlbnRzLWluLWJvb3N0LWFzaW8=">How strands guarantee correct execution of pending events in boost.asio<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly9zb3VyY2Vmb3JnZS5uZXQvcC9hc2lvL21haWxtYW4vbWVzc2FnZS8xOTQ4NTU5Ni8=">asio C++ library<i class="fa fa-external-link-alt"></i></span><br><span class="exturl" data-url="aHR0cDovL3d3dy5vcGVuLXN0ZC5vcmcvanRjMS9zYzIyL3dnMjEvZG9jcy9wYXBlcnMvMjAxMi9uMzM4OC5wZGY=">Using Asio with C++11<i class="fa fa-external-link-alt"></i></span></li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/137637df.html" rel="prev" title="v8嵌入式开发--v8js篇">
+                  <i class="fa fa-angle-left"></i> v8嵌入式开发--v8js篇
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/b945c282.html" rel="next" title="一些c++库的使用总结">
+                  一些c++库的使用总结 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

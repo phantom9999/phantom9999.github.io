@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="简介“node-addon-api”是nodejs的”n-api”接口的c++封装, 通过提供c++对象模型和异常异常处理方式, 简化nodejs开发的成本. “n-api”是nodejs为原生拓展提供的c语言风格ABI, 它独立于js运行环境, 旨在屏蔽js运行环境的差异, 让拓展能够运行在不同版本的nodejs下.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="node-addon-api使用文档">
+<meta property="og:url" content="https://phantom9999.github.io/posts/10f6a378.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="简介“node-addon-api”是nodejs的”n-api”接口的c++封装, 通过提供c++对象模型和异常异常处理方式, 简化nodejs开发的成本. “n-api”是nodejs为原生拓展提供的c语言风格ABI, 它独立于js运行环境, 旨在屏蔽js运行环境的差异, 让拓展能够运行在不同版本的nodejs下.">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2019-03-29T22:34:39.000Z">
+<meta property="article:modified_time" content="2019-03-29T22:34:39.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="开发, cpp, c++, 研发, 搜广推, 搜索, 广告, 推荐">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/10f6a378.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/10f6a378.html","path":"posts/10f6a378.html","title":"node-addon-api使用文档"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>node-addon-api使用文档 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">数据结构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E6%9C%AC%E7%B1%BB%E5%9E%8B"><span class="nav-number">2.1.</span> <span class="nav-text">基本类型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%89%B9%E6%AE%8A%E7%B1%BB%E5%9E%8B"><span class="nav-number">2.2.</span> <span class="nav-text">特殊类型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AF%B9%E8%B1%A1%E5%8F%8A%E5%BC%95%E7%94%A8"><span class="nav-number">2.3.</span> <span class="nav-text">对象及引用</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%8Ejs%E4%BA%A4%E4%BA%92"><span class="nav-number">3.</span> <span class="nav-text">与js交互</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%87%AA%E5%AE%9A%E4%B9%89%E5%87%BD%E6%95%B0"><span class="nav-number">3.1.</span> <span class="nav-text">自定义函数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%87%AA%E5%AE%9A%E4%B9%89%E7%B1%BB"><span class="nav-number">3.2.</span> <span class="nav-text">自定义类</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#js%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8"><span class="nav-number">3.3.</span> <span class="nav-text">js函数调用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BC%82%E6%AD%A5%E6%93%8D%E4%BD%9C"><span class="nav-number">3.4.</span> <span class="nav-text">异步操作</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86"><span class="nav-number">3.5.</span> <span class="nav-text">异常处理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86"><span class="nav-number">4.</span> <span class="nav-text">内存管理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F"><span class="nav-number">4.1.</span> <span class="nav-text">生命周期</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%A2%9D%E5%A4%96%E7%B1%BB%E5%9E%8B"><span class="nav-number">4.2.</span> <span class="nav-text">额外类型</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%85%B6%E4%BB%96"><span class="nav-number">5.</span> <span class="nav-text">其他</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%89%88%E6%9C%AC%E7%AE%A1%E7%90%86"><span class="nav-number">5.1.</span> <span class="nav-text">版本管理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86-1"><span class="nav-number">6.</span> <span class="nav-text">异常处理</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86-1"><span class="nav-number">7.</span> <span class="nav-text">内存管理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AF%B9%E8%B1%A1%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E7%AE%A1%E7%90%86"><span class="nav-number">7.1.</span> <span class="nav-text">对象生命周期管理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%BC%82%E6%AD%A5%E6%93%8D%E4%BD%9C-1"><span class="nav-number">8.</span> <span class="nav-text">异步操作</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#promises"><span class="nav-number">9.</span> <span class="nav-text">promises</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%89%88%E6%9C%AC%E7%AE%A1%E7%90%86-1"><span class="nav-number">10.</span> <span class="nav-text">版本管理</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/10f6a378.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="node-addon-api使用文档 | phantom9999的博客">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          node-addon-api使用文档
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2019-03-29 22:34:39" itemprop="dateCreated datePublished" datetime="2019-03-29T22:34:39+00:00">2019-03-29</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/nodejs/" itemprop="url" rel="index"><span itemprop="name">nodejs</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>“node-addon-api”是nodejs的”n-api”接口的c++封装, 通过提供c++对象模型和异常异常处理方式, 简化nodejs开发的成本.</p>
+<p>“n-api”是nodejs为原生拓展提供的c语言风格ABI, 它独立于js运行环境, 旨在屏蔽js运行环境的差异, 让拓展能够运行在不同版本的nodejs下.</p>
+<p>“node-addon-api”不作为nodejs的组件发布, 它只是基于nodejs的”n-api”, 这样, “node-addon-api”将于nodejs本身解耦, 基于”node-addon-api”的拓展运行在新nodejs环境时, 不需要重新编译.</p>
+<p>值得注意的是, nodejs的其他接口, 例如<code>libuv</code>等, 并不包含在nodejs的拓展ABI内, 基于这些接口开发的nodejs拓展无法保证在多个版本的nodejs环境中运行. 由于”n-api”是nodejs 6.x之后才出现的, 因此这套ABI只支持nodejs6.x之后的版本. </p>
+<p>当新的api被添加到n-api后, node-addon-api必须马上更新, 否则node-addon-api就无法使用这部分特性.</p>
+<p>本文将数据结构, 异常处理, 与js交互等多个方面介绍node-addon-api.</p>
+<h1 id="数据结构"><a href="#数据结构" class="headerlink" title="数据结构"></a>数据结构</h1><p>首先是node-addon-api的数据结构, node-addon-api的数据结构是封装的n-api的, 我把它的数据结构分为两类, 一类是js中有直接对应类型的, 另一类是js中没有直接对应的类型, 但node-addon-api中出现的.</p>
+<h2 id="基本类型"><a href="#基本类型" class="headerlink" title="基本类型"></a>基本类型</h2><table>
+<thead>
+<tr>
+<th>js类型</th>
+<th>c++类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>string</td>
+<td>String</td>
+<td>字符串, 使用unicode存储</td>
+</tr>
+<tr>
+<td>number</td>
+<td>Number</td>
+<td>数字, 使用浮点存储</td>
+</tr>
+<tr>
+<td>boolean</td>
+<td>Boolean</td>
+<td>布尔值</td>
+</tr>
+<tr>
+<td>bigInt</td>
+<td>BigInt</td>
+<td>大整形, 新引入, 使用uint64数组存储</td>
+</tr>
+<tr>
+<td>object</td>
+<td>Object</td>
+<td>对象</td>
+</tr>
+<tr>
+<td>symbol</td>
+<td>Symbol</td>
+<td>符号</td>
+</tr>
+<tr>
+<td>Buffer</td>
+<td>Buffer</td>
+<td>二进制类型, 不受gc管理</td>
+</tr>
+<tr>
+<td>function</td>
+<td>Function</td>
+<td>函数类型</td>
+</tr>
+<tr>
+<td>arrayBuffer</td>
+<td>ArrayBuffer</td>
+<td>buffer数组类型</td>
+</tr>
+<tr>
+<td>typedArray</td>
+<td>TypedArray</td>
+<td>类型数组</td>
+</tr>
+<tr>
+<td>DataView</td>
+<td>DataView</td>
+<td>视图</td>
+</tr>
+<tr>
+<td>promises</td>
+<td>Promises</td>
+<td></td>
+</tr>
+</tbody></table>
+<h2 id="特殊类型"><a href="#特殊类型" class="headerlink" title="特殊类型"></a>特殊类型</h2><table>
+<thead>
+<tr>
+<th>特殊类型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Name</td>
+<td>特殊的类型, 可以用来作为类的属性名, 支持字符串和symbol</td>
+</tr>
+<tr>
+<td>Env</td>
+<td>特殊结构, 包含了当前请求的运行环境</td>
+</tr>
+<tr>
+<td>Value</td>
+<td>js类型的c++表现类型, js类型的基类</td>
+</tr>
+<tr>
+<td>CallbackInfo</td>
+<td>特殊结构, 包含函数参数列表和Env对象, 常出现在c++实现的js函数参数表中, , 由nodejs环境生成传递给自定义函数.</td>
+</tr>
+<tr>
+<td>Reference</td>
+<td>特殊引用类型, 类似于c++中的shared_ptr, 创建时不添加计数器. 当计数器为0时, 不负责删除数据, 使用垃圾回收机制回收数据.</td>
+</tr>
+<tr>
+<td>External</td>
+<td>用来包装c++数据的结构, 方便用户管理自定义结构, 这个类提供自定义清理函数接口, 可以让用户制定清理方法.</td>
+</tr>
+<tr>
+<td>ObjectReference</td>
+<td>对象引用类型, 是Reference的子类, 包含引用对象和一个计数器, 相当于shared_ptr.</td>
+</tr>
+<tr>
+<td>PropertyDescriptor</td>
+<td>js对象的属性描述, 可以是函数&#x2F;变量&#x2F;访问控制等.</td>
+</tr>
+<tr>
+<td>FunctionReference</td>
+<td></td>
+</tr>
+<tr>
+<td>ObjectWrap</td>
+<td></td>
+</tr>
+<tr>
+<td>ClassPropertyDescriptor</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2 id="对象及引用"><a href="#对象及引用" class="headerlink" title="对象及引用"></a>对象及引用</h2><h1 id="与js交互"><a href="#与js交互" class="headerlink" title="与js交互"></a>与js交互</h1><h2 id="自定义函数"><a href="#自定义函数" class="headerlink" title="自定义函数"></a>自定义函数</h2><h2 id="自定义类"><a href="#自定义类" class="headerlink" title="自定义类"></a>自定义类</h2><h2 id="js函数调用"><a href="#js函数调用" class="headerlink" title="js函数调用"></a>js函数调用</h2><h2 id="异步操作"><a href="#异步操作" class="headerlink" title="异步操作"></a>异步操作</h2><h2 id="异常处理"><a href="#异常处理" class="headerlink" title="异常处理"></a>异常处理</h2><h1 id="内存管理"><a href="#内存管理" class="headerlink" title="内存管理"></a>内存管理</h1><h2 id="生命周期"><a href="#生命周期" class="headerlink" title="生命周期"></a>生命周期</h2><h2 id="额外类型"><a href="#额外类型" class="headerlink" title="额外类型"></a>额外类型</h2><h1 id="其他"><a href="#其他" class="headerlink" title="其他"></a>其他</h1><h2 id="版本管理"><a href="#版本管理" class="headerlink" title="版本管理"></a>版本管理</h2><h1 id="异常处理-1"><a href="#异常处理-1" class="headerlink" title="异常处理"></a>异常处理</h1><h1 id="内存管理-1"><a href="#内存管理-1" class="headerlink" title="内存管理"></a>内存管理</h1><h2 id="对象生命周期管理"><a href="#对象生命周期管理" class="headerlink" title="对象生命周期管理"></a>对象生命周期管理</h2><h1 id="异步操作-1"><a href="#异步操作-1" class="headerlink" title="异步操作"></a>异步操作</h1><h1 id="promises"><a href="#promises" class="headerlink" title="promises"></a>promises</h1><h1 id="版本管理-1"><a href="#版本管理-1" class="headerlink" title="版本管理"></a>版本管理</h1>
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/ebe76269.html" rel="prev" title="node-addon-api-example">
+                  <i class="fa fa-angle-left"></i> node-addon-api-example
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/137637df.html" rel="next" title="v8嵌入式开发--v8js篇">
+                  v8嵌入式开发--v8js篇 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

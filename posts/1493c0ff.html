@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="autoFDO调研背景传统 FDO（Feedback-Directed Optimization）需要两步编译：先插桩编译出 instrumented 二进制，用它跑 workload 生成 profile，再基于 profile 重新编译。插桩版本运行开销大，且需要维护两套二进制。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="autofdo调研">
+<meta property="og:url" content="https://phantom9999.github.io/posts/1493c0ff.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="autoFDO调研背景传统 FDO（Feedback-Directed Optimization）需要两步编译：先插桩编译出 instrumented 二进制，用它跑 workload 生成 profile，再基于 profile 重新编译。插桩版本运行开销大，且需要维护两套二进制。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2020-10-23T19:50:59.000Z">
+<meta property="article:modified_time" content="2020-10-23T19:50:59.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="开发, cpp, c++, 研发, 搜广推, 搜索, 广告, 推荐">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/1493c0ff.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/1493c0ff.html","path":"posts/1493c0ff.html","title":"autofdo调研"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>autofdo调研 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#autoFDO%E8%B0%83%E7%A0%94"><span class="nav-number">1.</span> <span class="nav-text">autoFDO调研</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%83%8C%E6%99%AF"><span class="nav-number">1.1.</span> <span class="nav-text">背景</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%89%E8%A3%85"><span class="nav-number">1.2.</span> <span class="nav-text">安装</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E5%AE%89%E8%A3%85-autofdo-%E5%B7%A5%E5%85%B7"><span class="nav-number">1.2.1.</span> <span class="nav-text">1. 安装 autofdo 工具</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E7%A1%AE%E4%BF%9D-perf-%E6%94%AF%E6%8C%81-LBR-%E5%92%8C-PEBS"><span class="nav-number">1.2.2.</span> <span class="nav-text">2. 确保 perf 支持 LBR 和 PEBS</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E7%A1%AE%E4%BF%9D-GCC-%E7%89%88%E6%9C%AC-5-0"><span class="nav-number">1.2.3.</span> <span class="nav-text">3. 确保 GCC 版本 &gt;&#x3D; 5.0</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AE%80%E5%8D%95%E6%A1%88%E4%BE%8B"><span class="nav-number">1.3.</span> <span class="nav-text">简单案例</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%EF%BC%88%E7%AC%AC%E4%B8%80%E9%98%B6%E6%AE%B5%EF%BC%9A%E6%BA%90%E7%A0%81%E7%BC%96%E8%AF%91%EF%BC%8C%E5%B8%A6-debuginfo%EF%BC%89"><span class="nav-number">1.3.1.</span> <span class="nav-text">编译（第一阶段：源码编译，带 debuginfo）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%94%B6%E9%9B%86-profile"><span class="nav-number">1.3.2.</span> <span class="nav-text">收集 profile</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%EF%BC%88%E7%AC%AC%E4%BA%8C%E9%98%B6%E6%AE%B5%EF%BC%9A%E5%9F%BA%E4%BA%8E-profile-%E9%87%8D%E7%BC%96%E8%AF%91%EF%BC%89"><span class="nav-number">1.3.3.</span> <span class="nav-text">编译（第二阶段：基于 profile 重编译）</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%A4%8D%E6%9D%82%E6%A1%88%E4%BE%8B%EF%BC%9A%E5%A4%9A%E6%BA%90%E5%90%88%E5%B9%B6%E4%B8%8E%E9%87%87%E6%A0%B7%E8%B0%83%E4%BC%98"><span class="nav-number">1.4.</span> <span class="nav-text">复杂案例：多源合并与采样调优</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-%E5%A4%9A-workload-%E5%88%86%E5%88%AB%E9%87%87%E9%9B%86"><span class="nav-number">1.4.1.</span> <span class="nav-text">1. 多 workload 分别采集</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E8%BD%AC%E6%8D%A2%E4%B8%BA%E6%96%87%E6%9C%AC-profile-%E5%90%8E%E5%90%88%E5%B9%B6"><span class="nav-number">1.4.2.</span> <span class="nav-text">2. 转换为文本 profile 后合并</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-%E9%87%8D%E7%BC%96%E8%AF%91"><span class="nav-number">1.4.3.</span> <span class="nav-text">3. 重编译</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%87%87%E6%A0%B7%E5%8F%82%E6%95%B0%E8%B0%83%E4%BC%98%E5%BB%BA%E8%AE%AE"><span class="nav-number">1.4.4.</span> <span class="nav-text">采样参数调优建议</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Profile-%E8%B4%A8%E9%87%8F%E6%A3%80%E6%9F%A5"><span class="nav-number">1.4.5.</span> <span class="nav-text">Profile 质量检查</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9"><span class="nav-number">1.5.</span> <span class="nav-text">注意事项</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%8F%82%E8%80%83"><span class="nav-number">2.</span> <span class="nav-text">参考</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/1493c0ff.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="autofdo调研 | phantom9999的博客">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          autofdo调研
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2020-10-23 19:50:59" itemprop="dateCreated datePublished" datetime="2020-10-23T19:50:59+00:00">2020-10-23</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/cpp-devel/" itemprop="url" rel="index"><span itemprop="name">cpp-devel</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="autoFDO调研"><a href="#autoFDO调研" class="headerlink" title="autoFDO调研"></a>autoFDO调研</h1><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>传统 FDO（Feedback-Directed Optimization）需要两步编译：先插桩编译出 instrumented 二进制，用它跑 workload 生成 profile，再基于 profile 重新编译。插桩版本运行开销大，且需要维护两套二进制。</p>
+<p>AutoFDO 的解决思路：<strong>直接用硬件性能计数器（perf）采集 CPU 采样+Branch 数据，离线转换为 GCC 可消费的 profile 格式</strong>，省去插桩编译这一步。核心依赖 Intel LBR（Last Branch Record）和 PEBS 特性。</p>
+<h2 id="安装"><a href="#安装" class="headerlink" title="安装"></a>安装</h2><h3 id="1-安装-autofdo-工具"><a href="#1-安装-autofdo-工具" class="headerlink" title="1. 安装 autofdo 工具"></a>1. 安装 autofdo 工具</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash"><span class="token function">git</span> clone https://github.com/google/autofdo.git
+<span class="token builtin class-name">cd</span> autofdo
+./configure
+<span class="token function">make</span> -j<span class="token variable"><span class="token variable">$(</span>nproc<span class="token variable">)</span></span>
+<span class="token function">make</span> <span class="token function">install</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>依赖项：</p>
+<ul>
+<li><code>autoconf</code> &#x2F; <code>automake</code></li>
+<li><code>libunwind</code>（栈回溯）</li>
+<li><code>libpfm4</code>（perf event 编码）</li>
+<li><code>gflags</code> &#x2F; <code>glog</code>（日志与选项）</li>
+</ul>
+<h3 id="2-确保-perf-支持-LBR-和-PEBS"><a href="#2-确保-perf-支持-LBR-和-PEBS" class="headerlink" title="2. 确保 perf 支持 LBR 和 PEBS"></a>2. 确保 perf 支持 LBR 和 PEBS</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">perf record <span class="token parameter variable">-e</span> cycles:pp <span class="token parameter variable">-b</span> <span class="token parameter variable">-c</span> <span class="token number">100003</span> <span class="token parameter variable">-o</span> /tmp/raw.perf -- ./your_binary<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>关键参数：</p>
+<ul>
+<li><code>-e cycles:pp</code>：PEBS 精确事件，记录指令地址</li>
+<li><code>-b</code>：开启 LBR 分支采样</li>
+<li><code>-c 100003</code>：采样周期（质数避免锁步），需要按场景调优</li>
+</ul>
+<h3 id="3-确保-GCC-版本-5-0"><a href="#3-确保-GCC-版本-5-0" class="headerlink" title="3. 确保 GCC 版本 &gt;&#x3D; 5.0"></a>3. 确保 GCC 版本 &gt;&#x3D; 5.0</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">gcc <span class="token parameter variable">--version</span>   <span class="token comment"># 需要 5.0+，支持 -fauto-profile</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<h2 id="简单案例"><a href="#简单案例" class="headerlink" title="简单案例"></a>简单案例</h2><p>以一个微基准测试为例：</p>
+<h3 id="编译（第一阶段：源码编译，带-debuginfo）"><a href="#编译（第一阶段：源码编译，带-debuginfo）" class="headerlink" title="编译（第一阶段：源码编译，带 debuginfo）"></a>编译（第一阶段：源码编译，带 debuginfo）</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">gcc <span class="token parameter variable">-O2</span> <span class="token parameter variable">-g</span> -fno-omit-frame-pointer <span class="token parameter variable">-o</span> bench bench.c<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<h3 id="收集-profile"><a href="#收集-profile" class="headerlink" title="收集 profile"></a>收集 profile</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash"><span class="token comment"># 用 perf 采集 LBR + PEBS 数据</span>
+perf record <span class="token parameter variable">-e</span> cycles:pp <span class="token parameter variable">-b</span> <span class="token parameter variable">-c</span> <span class="token number">100003</span> <span class="token parameter variable">-o</span> bench.perf.data -- ./bench
+
+<span class="token comment"># 转换为 GCC auto-profile 格式</span>
+create_gcov <span class="token parameter variable">--binary</span><span class="token operator">=</span>./bench <span class="token parameter variable">--profile</span><span class="token operator">=</span>bench.perf.data <span class="token parameter variable">--gcov</span><span class="token operator">=</span>bench.afdo<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="编译（第二阶段：基于-profile-重编译）"><a href="#编译（第二阶段：基于-profile-重编译）" class="headerlink" title="编译（第二阶段：基于 profile 重编译）"></a>编译（第二阶段：基于 profile 重编译）</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">gcc <span class="token parameter variable">-O2</span> <span class="token parameter variable">-g</span> -fauto-profile<span class="token operator">=</span>bench.afdo <span class="token parameter variable">-o</span> bench.optimized bench.c<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>此时 GCC 会根据 <code>bench.afdo</code> 中的热点和分支概率，重新决策内联、基本块重排、循环展开等优化。</p>
+<h2 id="复杂案例：多源合并与采样调优"><a href="#复杂案例：多源合并与采样调优" class="headerlink" title="复杂案例：多源合并与采样调优"></a>复杂案例：多源合并与采样调优</h2><p>实际业务中通常需要在多台机器、多个 workload 上采集后合并，常用的流水线：</p>
+<h3 id="1-多-workload-分别采集"><a href="#1-多-workload-分别采集" class="headerlink" title="1. 多 workload 分别采集"></a>1. 多 workload 分别采集</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">perf record <span class="token parameter variable">-e</span> cycles:pp <span class="token parameter variable">-b</span> <span class="token parameter variable">-c</span> <span class="token number">100003</span> <span class="token parameter variable">-o</span> wl1.perf.data -- ./svr <span class="token parameter variable">--workload</span><span class="token operator">=</span>a
+perf record <span class="token parameter variable">-e</span> cycles:pp <span class="token parameter variable">-b</span> <span class="token parameter variable">-c</span> <span class="token number">100003</span> <span class="token parameter variable">-o</span> wl2.perf.data -- ./svr <span class="token parameter variable">--workload</span><span class="token operator">=</span>b
+perf record <span class="token parameter variable">-e</span> cycles:pp <span class="token parameter variable">-b</span> <span class="token parameter variable">-c</span> <span class="token number">100003</span> <span class="token parameter variable">-o</span> wl3.perf.data -- ./svr <span class="token parameter variable">--workload</span><span class="token operator">=</span>c<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="2-转换为文本-profile-后合并"><a href="#2-转换为文本-profile-后合并" class="headerlink" title="2. 转换为文本 profile 后合并"></a>2. 转换为文本 profile 后合并</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">create_gcov <span class="token parameter variable">--binary</span><span class="token operator">=</span>./svr <span class="token parameter variable">--profile</span><span class="token operator">=</span>wl1.perf.data <span class="token parameter variable">--gcov</span><span class="token operator">=</span>wl1.afdo <span class="token parameter variable">--gcov_version</span><span class="token operator">=</span><span class="token number">1</span>
+create_gcov <span class="token parameter variable">--binary</span><span class="token operator">=</span>./svr <span class="token parameter variable">--profile</span><span class="token operator">=</span>wl2.perf.data <span class="token parameter variable">--gcov</span><span class="token operator">=</span>wl2.afdo <span class="token parameter variable">--gcov_version</span><span class="token operator">=</span><span class="token number">1</span>
+create_gcov <span class="token parameter variable">--binary</span><span class="token operator">=</span>./svr <span class="token parameter variable">--profile</span><span class="token operator">=</span>wl3.perf.data <span class="token parameter variable">--gcov</span><span class="token operator">=</span>wl3.afdo <span class="token parameter variable">--gcov_version</span><span class="token operator">=</span><span class="token number">1</span>
+
+<span class="token comment"># profile_merger 按权重合并多个 profile</span>
+profile_merger <span class="token parameter variable">--input</span><span class="token operator">=</span>wl1.afdo,wl2.afdo,wl3.afdo <span class="token punctuation">\</span>
+               <span class="token parameter variable">--weight</span><span class="token operator">=</span><span class="token number">3,2</span>,1 <span class="token punctuation">\</span>
+               <span class="token parameter variable">--output</span><span class="token operator">=</span>merged.afdo<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="3-重编译"><a href="#3-重编译" class="headerlink" title="3. 重编译"></a>3. 重编译</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">gcc <span class="token parameter variable">-O2</span> <span class="token parameter variable">-g</span> -fauto-profile<span class="token operator">=</span>merged.afdo <span class="token parameter variable">-o</span> svr.optimized svr.c<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<h3 id="采样参数调优建议"><a href="#采样参数调优建议" class="headerlink" title="采样参数调优建议"></a>采样参数调优建议</h3><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>作用</th>
+<th>调优方向</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>perf record -c &lt;N&gt;</code></td>
+<td>采样周期</td>
+<td>N 太小则 overhead 大，太大则 profile 稀疏。通常以 CPU 利用率 <code>&lt;= 2%</code> 为目标</td>
+</tr>
+<tr>
+<td><code>-e cycles:pp</code></td>
+<td>PEBS 精确事件</td>
+<td>用 <code>perf list</code> 查看硬件支持的事件，优先选 <code>:pp</code> 后缀</td>
+</tr>
+<tr>
+<td>LBR 栈深度</td>
+<td>硬件限制</td>
+<td>Intel Skylake 及之后为 32 条，Haswell&#x2F;Broadwell 为 16 条。过浅影响间接调用解虚拟化效果</td>
+</tr>
+</tbody></table>
+<h3 id="Profile-质量检查"><a href="#Profile-质量检查" class="headerlink" title="Profile 质量检查"></a>Profile 质量检查</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash"><span class="token comment"># 总采样数</span>
+dump_gcov <span class="token parameter variable">--gcov</span><span class="token operator">=</span>merged.afdo <span class="token operator">|</span> <span class="token function">head</span> <span class="token parameter variable">-20</span>
+
+<span class="token comment"># 热点函数覆盖率，top 30 热点</span>
+dump_gcov <span class="token parameter variable">--gcov</span><span class="token operator">=</span>merged.afdo <span class="token operator">|</span> <span class="token function">sort</span> -t, <span class="token parameter variable">-k2</span> <span class="token parameter variable">-nr</span> <span class="token operator">|</span> <span class="token function">head</span> <span class="token parameter variable">-30</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>dump_gcov</code> 输出格式为 <code>函数名,计数,入口计数,类型</code>，检查：</p>
+<ul>
+<li>热点函数的采样计数是否充足（建议 top 函数计数 &gt; 10000）</li>
+<li>关键函数是否都有覆盖</li>
+</ul>
+<h2 id="注意事项"><a href="#注意事项" class="headerlink" title="注意事项"></a>注意事项</h2><ul>
+<li><strong>debuginfo 质量</strong>：编译时必须加 <code>-g</code> 且不可 strip。release 用 <code>-g1</code> 或 Debug Fission（<code>-gsplit-dwarf</code>）减少体积。</li>
+<li><strong>LBR 限制</strong>：虚拟机环境 LBR 可能不可用（需 host 透传），检查 <code>dmesg | grep -i lbr</code>。</li>
+<li><strong>profile 时效性</strong>：源码改动后 profile 会失效，CI 中需要定期重新采集。</li>
+</ul>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><ul>
+<li><span class="exturl" data-url="aHR0cHM6Ly9nY2MuZ251Lm9yZy93aWtpL0F1dG9GRE8vVHV0b3JpYWw=">gcc autoFDO教程<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3pob3UxNTE5L2FydGljbGUvZGV0YWlscy84NDEzOTU3MA==">gcc autoFDO教程 翻译<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL2dvb2dsZS9hdXRvZmRv">autoFDO代码库<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly9nY2MuZ251Lm9yZy9vbmxpbmVkb2NzL2djYy9PcHRpbWl6ZS1PcHRpb25zLmh0bWwjT3B0aW1pemUtT3B0aW9ucw==">gcc 优化参数<i class="fa fa-external-link-alt"></i></span></li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/b945c282.html" rel="prev" title="一些c++库的使用总结">
+                  <i class="fa fa-angle-left"></i> 一些c++库的使用总结
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/3ca09cc4.html" rel="next" title="bazel使用文档">
+                  bazel使用文档 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

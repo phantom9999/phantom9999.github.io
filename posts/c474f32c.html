@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="NV Embedding Cache SDK 中 8 种 Table 实现的完整全览，涵盖 GPU 缓存表、CPU 哈希表、远程存储表的设计与实现。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tables-overview">
+<meta property="og:url" content="https://phantom9999.github.io/posts/c474f32c.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="NV Embedding Cache SDK 中 8 种 Table 实现的完整全览，涵盖 GPU 缓存表、CPU 哈希表、远程存储表的设计与实现。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-30T16:31:55.000Z">
+<meta property="article:modified_time" content="2026-05-30T16:31:55.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="CPU">
+<meta property="article:tag" content="Embedding">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="NVEmbeddingCache">
+<meta property="article:tag" content="NVIDIA">
+<meta property="article:tag" content="Redis">
+<meta property="article:tag" content="RocksDB">
+<meta property="article:tag" content="Table">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/c474f32c.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/c474f32c.html","path":"posts/c474f32c.html","title":"tables-overview"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>tables-overview | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Table-%E5%AE%9E%E7%8E%B0%E5%85%A8%E8%A7%88"><span class="nav-number">1.</span> <span class="nav-text">Table 实现全览</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A6%82%E8%BF%B0"><span class="nav-number">1.1.</span> <span class="nav-text">概述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E3%80%81Table-%E5%9F%BA%E7%B1%BB%E6%8E%A5%E5%8F%A3%E8%AF%A6%E8%A7%A3"><span class="nav-number">1.2.</span> <span class="nav-text">一、Table 基类接口详解</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E6%93%8D%E4%BD%9C%E5%A5%91%E7%BA%A6"><span class="nav-number">1.2.1.</span> <span class="nav-text">核心操作契约</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%91%BD%E4%B8%AD%E7%8E%87%E8%AE%A1%E6%95%B0"><span class="nav-number">1.2.2.</span> <span class="nav-text">命中率计数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E3%80%81GpuTable-%E2%80%94-GPU-%E9%9B%86%E5%90%88%E5%85%B3%E8%81%94%E7%BC%93%E5%AD%98%E8%A1%A8"><span class="nav-number">1.3.</span> <span class="nav-text">二、GpuTable — GPU 集合关联缓存表</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9E%B6%E6%9E%84%E5%B1%82%E6%AC%A1"><span class="nav-number">1.3.1.</span> <span class="nav-text">架构层次</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5%E6%89%BE%E7%9A%84%E5%9B%9B%E7%A7%8D-kernel-%E6%A8%A1%E5%BC%8F"><span class="nav-number">1.3.2.</span> <span class="nav-text">查找的四种 kernel 模式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Insert-%E7%9A%84%E7%9B%B4%E6%96%B9%E5%9B%BE%E4%BC%98%E5%8C%96"><span class="nav-number">1.3.3.</span> <span class="nav-text">Insert 的直方图优化</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E3%80%81LinearHostTable-%E2%80%94-CPU-%E7%BA%BF%E6%80%A7%E8%A1%A8"><span class="nav-number">1.4.</span> <span class="nav-text">三、LinearHostTable — CPU 线性表</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AE%BE%E8%AE%A1%E7%90%86%E5%BF%B5"><span class="nav-number">1.4.1.</span> <span class="nav-text">设计理念</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E7%8E%B0"><span class="nav-number">1.4.2.</span> <span class="nav-text">实现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%80%82%E7%94%A8%E5%9C%BA%E6%99%AF"><span class="nav-number">1.4.3.</span> <span class="nav-text">适用场景</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E3%80%81STLContainerTable-%E2%80%94-%E5%86%85%E7%BD%AE-CPU-%E5%93%88%E5%B8%8C%E8%A1%A8"><span class="nav-number">1.5.</span> <span class="nav-text">四、STLContainerTable — 内置 CPU 哈希表</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9E%B6%E6%9E%84"><span class="nav-number">1.5.1.</span> <span class="nav-text">架构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%88%86%E7%89%87%E4%B8%8E%E5%B9%B6%E5%8F%91"><span class="nav-number">1.5.2.</span> <span class="nav-text">分片与并发</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E5%AD%98%E6%A7%BD%E7%AE%A1%E7%90%86"><span class="nav-number">1.5.3.</span> <span class="nav-text">内存槽管理</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B6%85%E9%A2%9D%E6%B7%98%E6%B1%B0%EF%BC%88Overflow%EF%BC%89"><span class="nav-number">1.5.4.</span> <span class="nav-text">超额淘汰（Overflow）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A8%A1%E6%9D%BF%E5%88%86%E5%8F%91"><span class="nav-number">1.5.5.</span> <span class="nav-text">模板分发</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%85%E7%BD%AE%E5%88%AB%E5%90%8D"><span class="nav-number">1.5.6.</span> <span class="nav-text">内置别名</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%94%E3%80%81AbseilFlatMapTable-%E2%80%94-Abseil-Swiss-Table-%E6%8F%92%E4%BB%B6"><span class="nav-number">1.6.</span> <span class="nav-text">五、AbseilFlatMapTable — Abseil Swiss Table 插件</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AD%E3%80%81PHMapFlatMapTable-%E2%80%94-Parallel-Hashmap-%E6%8F%92%E4%BB%B6"><span class="nav-number">1.7.</span> <span class="nav-text">六、PHMapFlatMapTable — Parallel Hashmap 插件</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%83%E3%80%81NvhmMapTable-%E2%80%94-NVIDIA-nvhashmap-%E6%8F%92%E4%BB%B6"><span class="nav-number">1.8.</span> <span class="nav-text">七、NvhmMapTable — NVIDIA nvhashmap 插件</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%8E-STLContainerTable-%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">1.8.1.</span> <span class="nav-text">与 STLContainerTable 的区别</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%85%8D%E7%BD%AE"><span class="nav-number">1.8.2.</span> <span class="nav-text">配置</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5%E6%89%BE%E4%B8%AD%E7%9A%84%E8%BD%AF%E4%BB%B6%E9%A2%84%E5%8F%96"><span class="nav-number">1.8.3.</span> <span class="nav-text">查找中的软件预取</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A8%A1%E6%9D%BF%E5%88%86%E5%8F%91-1"><span class="nav-number">1.8.4.</span> <span class="nav-text">模板分发</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AB%E3%80%81RedisClusterTable-%E2%80%94-Redis-%E8%BF%9C%E7%A8%8B%E8%A1%A8"><span class="nav-number">1.9.</span> <span class="nav-text">八、RedisClusterTable — Redis 远程表</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9E%B6%E6%9E%84-1"><span class="nav-number">1.9.1.</span> <span class="nav-text">架构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%85%8D%E7%BD%AE-1"><span class="nav-number">1.9.2.</span> <span class="nav-text">配置</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5%E6%89%BE%E5%AE%9E%E7%8E%B0"><span class="nav-number">1.9.3.</span> <span class="nav-text">查找实现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E4%BE%9D%E8%B5%96"><span class="nav-number">1.9.4.</span> <span class="nav-text">链接依赖</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B9%9D%E3%80%81RocksDBTable-%E2%80%94-%E7%A3%81%E7%9B%98%E6%8C%81%E4%B9%85%E5%8C%96%E8%A1%A8"><span class="nav-number">1.10.</span> <span class="nav-text">九、RocksDBTable — 磁盘持久化表</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9E%B6%E6%9E%84-2"><span class="nav-number">1.10.1.</span> <span class="nav-text">架构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%85%8D%E7%BD%AE-2"><span class="nav-number">1.10.2.</span> <span class="nav-text">配置</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9F%A5%E6%89%BE%E5%AE%9E%E7%8E%B0-1"><span class="nav-number">1.10.3.</span> <span class="nav-text">查找实现</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%81%E3%80%81%E6%89%80%E6%9C%89-Table-%E7%9A%84%E5%AF%B9%E6%AF%94%E6%80%BB%E8%A1%A8"><span class="nav-number">1.11.</span> <span class="nav-text">十、所有 Table 的对比总表</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%81%E4%B8%80%E3%80%81%E5%9C%A8%E5%B5%8C%E5%85%A5%E5%B1%82%E4%B8%AD%E7%9A%84%E8%A7%92%E8%89%B2%E6%80%BB%E7%BB%93"><span class="nav-number">1.12.</span> <span class="nav-text">十一、在嵌入层中的角色总结</span></a></li></ol></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/c474f32c.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="tables-overview | phantom9999的博客">
+      <meta itemprop="description" content="NV Embedding Cache SDK 中 8 种 Table 实现的完整全览，涵盖 GPU 缓存表、CPU 哈希表、远程存储表的设计与实现。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          tables-overview
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2026-05-30 16:31:55" itemprop="dateCreated datePublished" datetime="2026-05-30T16:31:55+00:00">2026-05-30</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/inference/" itemprop="url" rel="index"><span itemprop="name">inference</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">NV Embedding Cache SDK 中 8 种 Table 实现的完整全览，涵盖 GPU 缓存表、CPU 哈希表、远程存储表的设计与实现。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="Table-实现全览"><a href="#Table-实现全览" class="headerlink" title="Table 实现全览"></a>Table 实现全览</h1><h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h2><p><code>Table</code> 是 NV Embedding Cache SDK 中所有存储后端的<strong>统一抽象基类</strong>，定义了以下纯虚接口：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">Table</span> <span class="token punctuation">&#123;</span>
+  <span class="token keyword">virtual</span> <span class="token operator">~</span><span class="token function">Table</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token keyword">default</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">clear</span><span class="token punctuation">(</span>context_ptr_t<span class="token operator">&amp;</span> ctx<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">erase</span><span class="token punctuation">(</span>context_ptr_t<span class="token operator">&amp;</span> ctx<span class="token punctuation">,</span> <span class="token keyword">int64_t</span> n<span class="token punctuation">,</span> <span class="token keyword">const</span> <span class="token keyword">void</span><span class="token operator">*</span> keys<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">find</span><span class="token punctuation">(</span>context_ptr_t<span class="token operator">&amp;</span> ctx<span class="token punctuation">,</span> <span class="token keyword">int64_t</span> n<span class="token punctuation">,</span> <span class="token keyword">const</span> <span class="token keyword">void</span><span class="token operator">*</span> keys<span class="token punctuation">,</span>
+                    max_bitmask_repr_t<span class="token operator">*</span> hit_mask<span class="token punctuation">,</span> <span class="token keyword">int64_t</span> value_stride<span class="token punctuation">,</span>
+                    <span class="token keyword">void</span><span class="token operator">*</span> values<span class="token punctuation">,</span> <span class="token keyword">int64_t</span><span class="token operator">*</span> value_sizes<span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">insert</span><span class="token punctuation">(</span>context_ptr_t<span class="token operator">&amp;</span> ctx<span class="token punctuation">,</span> <span class="token keyword">int64_t</span> n<span class="token punctuation">,</span> <span class="token keyword">const</span> <span class="token keyword">void</span><span class="token operator">*</span> keys<span class="token punctuation">,</span>
+                      <span class="token keyword">int64_t</span> value_stride<span class="token punctuation">,</span> <span class="token keyword">int64_t</span> value_size<span class="token punctuation">,</span> <span class="token keyword">const</span> <span class="token keyword">void</span><span class="token operator">*</span> values<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">update</span><span class="token punctuation">(</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">update_accumulate</span><span class="token punctuation">(</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> context_ptr_t <span class="token function">create_execution_context</span><span class="token punctuation">(</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">reset_lookup_counter</span><span class="token punctuation">(</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">get_lookup_counter</span><span class="token punctuation">(</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">bool</span> <span class="token function">lookup_counter_hits</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">int32_t</span> <span class="token function">get_device_id</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">int64_t</span> <span class="token function">get_max_row_size</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+  <span class="token keyword">virtual</span> <span class="token keyword">int64_t</span> <span class="token function">get_invalid_key</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>项目实现了 <strong>8 种表</strong>，按存储位置和底层技术可分为：</p>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>表实现</th>
+<th>存储位置</th>
+<th>数据持久化</th>
+<th>依赖</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GPU 缓存表</td>
+<td><code>GpuTable</code></td>
+<td>GPU 显存</td>
+<td>❌</td>
+<td>cuEmbed + EmbedCacheSA</td>
+</tr>
+<tr>
+<td>CPU 线性表</td>
+<td><code>LinearHostTable</code></td>
+<td>CPU 内存（用户分配）</td>
+<td>❌</td>
+<td>无（memcpy 直接读写）</td>
+</tr>
+<tr>
+<td>CPU 哈希表（内置）</td>
+<td><code>STLContainerTable</code></td>
+<td>CPU 内存</td>
+<td>❌</td>
+<td><code>std::unordered_map</code></td>
+</tr>
+<tr>
+<td>CPU 哈希表（Abseil）</td>
+<td><code>AbseilFlatMapTable</code></td>
+<td>CPU 内存</td>
+<td>❌</td>
+<td>Abseil Swiss Table</td>
+</tr>
+<tr>
+<td>CPU 哈希表（PHMAP）</td>
+<td><code>PHMapFlatMapTable</code></td>
+<td>CPU 内存</td>
+<td>❌</td>
+<td>Parallel Hashmap</td>
+</tr>
+<tr>
+<td>CPU GPU 哈希表</td>
+<td><code>NvhmMapTable</code></td>
+<td>CPU 内存（nvhashmap）</td>
+<td>❌</td>
+<td>NVIDIA nvhashmap</td>
+</tr>
+<tr>
+<td>远程缓存</td>
+<td><code>RedisClusterTable</code></td>
+<td>远程 Redis 集群</td>
+<td>✅ 持久化</td>
+<td>hiredis + redis++</td>
+</tr>
+<tr>
+<td>磁盘存储</td>
+<td><code>RocksDBTable</code></td>
+<td>本地磁盘</td>
+<td>✅ 持久化</td>
+<td>Facebook RocksDB</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="一、Table-基类接口详解"><a href="#一、Table-基类接口详解" class="headerlink" title="一、Table 基类接口详解"></a>一、Table 基类接口详解</h2><h3 id="核心操作契约"><a href="#核心操作契约" class="headerlink" title="核心操作契约"></a>核心操作契约</h3><p><strong><code>find(ctx, n, keys, hit_mask, value_stride, values, value_sizes)</code></strong></p>
+<ul>
+<li><strong>输入</strong>：<code>hit_mask</code> 中 bit&#x3D;0 的键需要被查找，bit&#x3D;1 的键应跳过</li>
+<li><strong>输出</strong>：对于 bit&#x3D;0 且在表中找到的键，将其 bit 设为 1，并将值写入 <code>values</code> 的对应位置</li>
+<li><strong>紧凑写入</strong>：如果 <code>values</code> 是 nullptr，则只做计数&#x2F;键存在性检查</li>
+</ul>
+<p><strong><code>insert(ctx, n, keys, value_stride, value_size, values)</code></strong></p>
+<ul>
+<li>向表中插入键值对。如果键已存在，行为取决于实现（替换或忽略）</li>
+<li><strong>最佳努力操作</strong>：如果触发了超额淘汰，新插入的键可能立即被淘汰</li>
+</ul>
+<p><strong><code>update(ctx, n, keys, value_stride, value_size, values)</code></strong></p>
+<ul>
+<li>只覆盖表中<strong>已存在</strong>的键，不存在的键被忽略</li>
+<li><code>GpuTable</code> 如果配置了 <code>uvm_table</code> 且未禁用 UVM 更新，会同时写入 UVM 后备表</li>
+</ul>
+<p><strong><code>update_accumulate(ctx, n, keys, update_stride, update_size, updates, update_dtype)</code></strong></p>
+<ul>
+<li>梯度累积模式：<code>table[key] += updates[i]</code></li>
+<li><code>update_dtype</code> 可以不同于表的存储类型（如 fp32 梯度累积到 fp16 表）</li>
+</ul>
+<h3 id="命中率计数"><a href="#命中率计数" class="headerlink" title="命中率计数"></a>命中率计数</h3><table>
+<thead>
+<tr>
+<th>方法</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>reset_lookup_counter(ctx)</code></td>
+<td>重置计数器</td>
+</tr>
+<tr>
+<td><code>get_lookup_counter(ctx, counter)</code></td>
+<td>读取计数器值（GPU 表需先 <code>cudaStreamSynchronize</code>）</td>
+</tr>
+<tr>
+<td><code>lookup_counter_hits()</code></td>
+<td><code>false</code> &#x3D; 计数的是 miss，<code>true</code> &#x3D; 计数的是 hit</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="二、GpuTable-—-GPU-集合关联缓存表"><a href="#二、GpuTable-—-GPU-集合关联缓存表" class="headerlink" title="二、GpuTable — GPU 集合关联缓存表"></a>二、GpuTable — GPU 集合关联缓存表</h2><p><strong>头文件</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/include/gpu_table.hpp"><code>include/gpu_table.hpp</code></a> | <strong>实现</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/src/gpu_table.cu"><code>src/gpu_table.cu</code></a></p>
+<p>GpuTable 是 NVE 的核心 GPU 端表实现，内部封装了 <code>EmbedCacheSA&lt;KeyType, KeyType&gt;</code> ——一个<strong>集合关联（Set-Associative）软件管理缓存</strong>。</p>
+<h3 id="架构层次"><a href="#架构层次" class="headerlink" title="架构层次"></a>架构层次</h3><pre class="line-numbers language-none"><code class="language-none">GpuTable
+  └── EmbedCacheSA&lt;KeyType, KeyType&gt;  (GPU 集合关联缓存)
+        ├── EmbedCacheSA 基类: 标签匹配 + 数据区 + 替换策略
+        ├── CacheSADeviceModify: 修改操作在 GPU 上执行
+        └── CacheSAHostModify: 修改操作在 CPU 上执行（调试用途）<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="查找的四种-kernel-模式"><a href="#查找的四种-kernel-模式" class="headerlink" title="查找的四种 kernel 模式"></a>查找的四种 kernel 模式</h3><p>当 <code>uvm_table</code> 非空时，<code>run_find_uvm()</code> 根据键数量选择执行策略：</p>
+<table>
+<thead>
+<tr>
+<th>Kernel 模式</th>
+<th>阈值条件</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>LookupUVM</code></td>
+<td>默认：num_keys &lt; 1M</td>
+<td>一次 cache-&gt;lookup 调用，cache miss 时直接从 UVM table 读取</td>
+</tr>
+<tr>
+<td><code>SortGather</code></td>
+<td>默认：num_keys ≥ 1M</td>
+<td>先排序键（去重），大块连续读取 UVM，改善 page fault 局部性</td>
+</tr>
+<tr>
+<td><code>PipelineGather</code></td>
+<td>用户明确指定</td>
+<td>流水线 gather kernel，分 tile 处理</td>
+</tr>
+<tr>
+<td><code>DynamicKernel</code></td>
+<td>—</td>
+<td>暂未实现</td>
+</tr>
+</tbody></table>
+<h3 id="Insert-的直方图优化"><a href="#Insert-的直方图优化" class="headerlink" title="Insert 的直方图优化"></a>Insert 的直方图优化</h3><p>GpuTable 的 insert 操作使用 <code>DefaultGPUHistogram</code> 在 GPU 上对键做<strong>频率统计和去重</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">输入: [1, 2, 1, 3, 2, 1, 1]  (7 个键)
+  ↓
+DefaultGPUHistogram（GPU kernel）
+  ↓
+输出: 键 [1, 2, 3] 按频率排序 (4, 2, 1)
+  ↓
+cache-&gt;insert() → 高频键优先插入 cache<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>频率越高的键在 insert 中获得越高优先级，在集合关联缓存中更不容易被淘汰。</p>
+<hr>
+<h2 id="三、LinearHostTable-—-CPU-线性表"><a href="#三、LinearHostTable-—-CPU-线性表" class="headerlink" title="三、LinearHostTable — CPU 线性表"></a>三、LinearHostTable — CPU 线性表</h2><p><strong>头文件</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/include/linear_host_table.hpp"><code>include/linear_host_table.hpp</code></a> | <strong>实现</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/src/linear_host_table.cpp"><code>src/linear_host_table.cpp</code></a></p>
+<h3 id="设计理念"><a href="#设计理念" class="headerlink" title="设计理念"></a>设计理念</h3><p><code>LinearHostTable</code> 是最简单的 CPU 端表实现：嵌入向量存储在用户提供的<strong>连续内存缓冲区</strong>中，通过 <code>key * row_size</code> 直接计算地址后 <code>memcpy</code> 读写。无哈希、无索引、无淘汰——这与 <code>GPUEmbeddingLayer</code> 在 GPU 端的角色完全对称。</p>
+<h3 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 查找: 最简单的 memcpy</span>
+<span class="token keyword">void</span> <span class="token function">find</span><span class="token punctuation">(</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    thread_pool<span class="token operator">-></span><span class="token function">execute_n</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> num_tasks<span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token operator">=</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token keyword">int64_t</span> idx<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">for</span> each key 跳过 hitmask 已标记的<span class="token operator">:</span>
+            <span class="token function">memcpy</span><span class="token punctuation">(</span>output <span class="token operator">+</span> k <span class="token operator">*</span> output_stride<span class="token punctuation">,</span>
+                   src <span class="token operator">+</span> keys<span class="token punctuation">[</span>k<span class="token punctuation">]</span> <span class="token operator">*</span> row_size_in_bytes<span class="token punctuation">,</span>
+                   row_size_in_bytes<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">memset</span><span class="token punctuation">(</span>hit_mask<span class="token punctuation">,</span> <span class="token number">0xff</span><span class="token punctuation">,</span> <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="适用场景"><a href="#适用场景" class="headerlink" title="适用场景"></a>适用场景</h3><ul>
+<li>与 <code>GpuTable</code> 配合，UVM 后备表的 CPU 端视图</li>
+<li>纯 CPU 推理场景，嵌入表可完全装入系统内存</li>
+<li>作为 <code>HierarchicalEmbeddingLayer</code> 的中间层</li>
+</ul>
+<hr>
+<h2 id="四、STLContainerTable-—-内置-CPU-哈希表"><a href="#四、STLContainerTable-—-内置-CPU-哈希表" class="headerlink" title="四、STLContainerTable — 内置 CPU 哈希表"></a>四、STLContainerTable — 内置 CPU 哈希表</h2><p><strong>头文件</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/include/stl_map_backed_table.hpp"><code>include/stl_map_backed_table.hpp</code></a> | <strong>实现</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/src/stl_map_backed_table.cpp"><code>src/stl_map_backed_table.cpp</code></a></p>
+<h3 id="架构"><a href="#架构" class="headerlink" title="架构"></a>架构</h3><p>STLContainerTable 是所有基于 STL 风格容器的 CPU 哈希表实现的<strong>公共基类</strong>。它使用 <code>std::unordered_map&lt;KeyType, char*&gt;</code> 作为底层映射，核心价值在于它实现了一套完整的内存管理、并发控制、超额淘汰基础设施。</p>
+<pre class="line-numbers language-none"><code class="language-none">STLContainerTable  (模板基类)
+  ├── 持有 std::vector&lt;Partition&gt;
+  │     └── Partition:
+  │           ├── std::shared_mutex  (读写锁)
+  │           ├── std::unordered_map&lt;KeyType, char*&gt;  (键 → 槽指针)
+  │           └── SlotBuffer (手动管理的内存池)
+  │
+  ├── 查找: 分片并发 + hitmask 过滤 + 软件预取
+  ├── 插入: 分片加锁 + 槽分配 + 超额淘汰
+  ├── 更新: 分片加锁 + 直接覆盖
+  ├── 累积: 分片加锁 + 原子累加 + inline meta
+  └── 淘汰: 三种策略 → EvictRandom &#x2F; EvictLRU &#x2F; EvictLFU<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="分片与并发"><a href="#分片与并发" class="headerlink" title="分片与并发"></a>分片与并发</h3><p>所有操作按 <code>partitioner(key) &amp; (num_partitions - 1)</code> 分配到对应分片：</p>
+<ul>
+<li><strong>查找</strong>：每个分片加共享锁（<code>shared_lock</code>），多线程并行</li>
+<li><strong>修改</strong>：每个分片加独占锁（<code>unique_lock</code>），保证写一致性</li>
+</ul>
+<h3 id="内存槽管理"><a href="#内存槽管理" class="headerlink" title="内存槽管理"></a>内存槽管理</h3><p>STLContainerTable 不把值直接存在 <code>std::unordered_map</code> 的 value 中，而是<strong>手动管理</strong>一个连续的 slot buffer：</p>
+<pre class="line-numbers language-none"><code class="language-none">Slot Buffer 布局:
+┌────────────────────────────────────────────────┐
+│ Row 0  │  value_bytes  │  meta_bytes  │ padding│
+│ Row 1  │  value_bytes  │  meta_bytes  │ padding│
+│ ...... │  .............│ .............│ .......│
+│ Row N  │  value_bytes  │  meta_bytes  │ padding│
+└────────────────────────────────────────────────┘<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ul>
+<li><strong>value_bytes</strong>：嵌入向量数据</li>
+<li><strong>meta_bytes</strong>：inline metadata（LRU 时间戳或 LFU 频率计数）</li>
+<li><code>std::unordered_map</code> 只存 <code>key → char*</code>（指向 slot 起始位置）</li>
+</ul>
+<p>这种设计将哈希表索引和数据存储分离，元数据跟随数据一起移动，淘汰时只需排序 meta 即可决定谁被淘汰。</p>
+<h3 id="超额淘汰（Overflow）"><a href="#超额淘汰（Overflow）" class="headerlink" title="超额淘汰（Overflow）"></a>超额淘汰（Overflow）</h3><p>当插入导致分片容量超过阈值时触发淘汰：</p>
+<pre class="line-numbers language-none"><code class="language-none">overflow_margin &#x3D; 512（额外条目数）
+resolution_margin &#x3D; 0.2（淘汰比例 20%）
+
+触发条件: partition.size() &gt; initial_capacity + overflow_margin
+淘汰过程:
+  1. 收集所有 key + meta
+  2. 按 meta 排序:
+     - EvictRandom: 随机打乱
+     - EvictLRU: 按时间戳排序（最久未使用优先）
+     - EvictLFU: 按频率排序（最少使用优先）
+  3. 淘汰 resolution_margin 比例的条目
+  4. 释放对应的 slot 内存<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="模板分发"><a href="#模板分发" class="headerlink" title="模板分发"></a>模板分发</h3><p><code>produce()</code> 方法按 <code>mask_size</code> → <code>key_size</code> → <code>overflow_handler</code> → <code>partitioner</code> 四维 switch 分发，生成约 <strong>192 种</strong>编译时类型特化。</p>
+<h3 id="内置别名"><a href="#内置别名" class="headerlink" title="内置别名"></a>内置别名</h3><p>系统中预注册了 6 个别名指向同一个基于 <code>std::unordered_map</code> 的 STLMapTableFactory：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token punctuation">&#123;</span><span class="token string">"stl_map"</span><span class="token punctuation">,</span> <span class="token string">"map"</span><span class="token punctuation">,</span> <span class="token string">"stl_unordered_map"</span><span class="token punctuation">,</span> <span class="token string">"unordered_map"</span><span class="token punctuation">,</span> <span class="token string">"stl_umap"</span><span class="token punctuation">,</span> <span class="token string">"umap"</span><span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<hr>
+<h2 id="五、AbseilFlatMapTable-—-Abseil-Swiss-Table-插件"><a href="#五、AbseilFlatMapTable-—-Abseil-Swiss-Table-插件" class="headerlink" title="五、AbseilFlatMapTable — Abseil Swiss Table 插件"></a>五、AbseilFlatMapTable — Abseil Swiss Table 插件</h2><p><strong>头文件</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/plugins/abseil/include/abseil_flat_map_table.hpp"><code>plugins/abseil/include/abseil_flat_map_table.hpp</code></a> | <strong>注册名</strong>：<code>abseil_flat_map</code></p>
+<p>继承 <code>STLContainerTable</code>，将底层容器替换为 <code>absl::flat_hash_map&lt;KeyType, char*&gt;</code>。<code>absl::flat_hash_map</code> 使用 Google 的 Swiss Table 算法（开放寻址 + 元数据字节 + SIMD 查找），比 <code>std::unordered_map</code> 有更好的内存局部性和查找性能。</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>STLContainerTable</th>
+<th>AbseilFlatMapTable</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>底层容器</td>
+<td><code>std::unordered_map</code>（链式哈希）</td>
+<td><code>absl::flat_hash_map</code>（Swiss Table）</td>
+</tr>
+<tr>
+<td>额外配置</td>
+<td>无</td>
+<td><code>initial_capacity</code> 用于 <code>reserve()</code></td>
+</tr>
+<tr>
+<td>链接依赖</td>
+<td>无</td>
+<td><code>absl_raw_logging_internal</code> + <code>absl_hash</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="六、PHMapFlatMapTable-—-Parallel-Hashmap-插件"><a href="#六、PHMapFlatMapTable-—-Parallel-Hashmap-插件" class="headerlink" title="六、PHMapFlatMapTable — Parallel Hashmap 插件"></a>六、PHMapFlatMapTable — Parallel Hashmap 插件</h2><p><strong>头文件</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/plugins/phmap/include/phmap_flat_map_table.hpp"><code>plugins/phmap/include/phmap_flat_map_table.hpp</code></a> | <strong>注册名</strong>：<code>phmap_flat_map</code></p>
+<p>实现方式与 Abseil 插件完全相同——继承 <code>STLContainerTable</code>，底层替换为 <code>phmap::flat_hash_map&lt;KeyType, char*&gt;</code>。PHMAP 使用与 Abseil 类似的开放寻址算法，但实现更轻量，无外部链接依赖（header-only）。</p>
+<hr>
+<h2 id="七、NvhmMapTable-—-NVIDIA-nvhashmap-插件"><a href="#七、NvhmMapTable-—-NVIDIA-nvhashmap-插件" class="headerlink" title="七、NvhmMapTable — NVIDIA nvhashmap 插件"></a>七、NvhmMapTable — NVIDIA nvhashmap 插件</h2><p><strong>头文件</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/plugins/nvhm/include/nvhm_map_table.hpp"><code>plugins/nvhm/include/nvhm_map_table.hpp</code></a> | <strong>注册名</strong>：<code>nvhm_map</code></p>
+<h3 id="与-STLContainerTable-的区别"><a href="#与-STLContainerTable-的区别" class="headerlink" title="与 STLContainerTable 的区别"></a>与 STLContainerTable 的区别</h3><p>NvhmMapTable <strong>不继承</strong> <code>STLContainerTable</code>，而是直接继承 <code>HostTable&lt;NvhmMapTableConfig&gt;</code>，直接使用 NVIDIA nvhashmap 的 <code>map</code> 接口：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">template</span> <span class="token operator">&lt;</span><span class="token keyword">typename</span> <span class="token class-name">MaskType</span><span class="token punctuation">,</span> <span class="token keyword">typename</span> <span class="token class-name">MapType</span><span class="token punctuation">,</span> <span class="token keyword">typename</span> <span class="token class-name">PartitionerType</span><span class="token operator">></span>
+<span class="token keyword">class</span> <span class="token class-name">NvhmMapTable</span> <span class="token keyword">final</span> <span class="token operator">:</span> <span class="token keyword">public</span> HostTable<span class="token operator">&lt;</span>NvhmMapTableConfig<span class="token operator">></span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">struct</span> <span class="token class-name">Partition</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">mutable</span> std<span class="token double-colon punctuation">::</span>shared_mutex read_write<span class="token punctuation">;</span>
+        map_type map<span class="token punctuation">;</span>  <span class="token comment">// nvhm::map&lt;KeyType, ValueType, ...></span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+    std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span>Partition<span class="token operator">></span> parts_<span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="配置"><a href="#配置" class="headerlink" title="配置"></a>配置</h3><table>
+<thead>
+<tr>
+<th>字段</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>kernel_size</code></td>
+<td>nvhm 默认</td>
+<td>内核大小 1<del>1024（对应 8</del>1024B entry）</td>
+</tr>
+<tr>
+<td><code>key_fetch_queue_length</code></td>
+<td>8</td>
+<td>软件预取管道深度 {0,1,2,4,8}</td>
+</tr>
+<tr>
+<td><code>prefetch_values</code></td>
+<td>true</td>
+<td>是否发出值预取指令</td>
+</tr>
+<tr>
+<td><code>minimize_psl</code></td>
+<td>false</td>
+<td>缩短 probe search length</td>
+</tr>
+<tr>
+<td><code>auto_shrink</code></td>
+<td>false</td>
+<td>大量淘汰后自动缩容</td>
+</tr>
+</tbody></table>
+<h3 id="查找中的软件预取"><a href="#查找中的软件预取" class="headerlink" title="查找中的软件预取"></a>查找中的软件预取</h3><p>nvhashmap 的 <code>ring_prefetch_queue</code> 实现了<strong>软件流水线预取</strong>：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> KeyFetchQueueLength<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token function">__builtin_prefetch</span><span class="token punctuation">(</span>next_key_address<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>在 <code>find_()</code> 模板方法中，通过 <code>KeyFetchQueueLength</code> 和 <code>PrefetchValues</code> 两个编译时参数控制预取行为，switch 生成 5 × 2 &#x3D; 10 种变体。</p>
+<h3 id="模板分发-1"><a href="#模板分发-1" class="headerlink" title="模板分发"></a>模板分发</h3><p>NvhmMapTable 的模板分发维度最多：</p>
+<p><code>mask_size</code> × <code>key_size</code> × <code>overflow_handler</code> × <code>kernel_size</code> × <code>minimize_psl</code> × <code>auto_shrink</code> × <code>partitioner</code></p>
+<p>→ <strong>约 6144 种</strong>编译时类型组合。</p>
+<hr>
+<h2 id="八、RedisClusterTable-—-Redis-远程表"><a href="#八、RedisClusterTable-—-Redis-远程表" class="headerlink" title="八、RedisClusterTable — Redis 远程表"></a>八、RedisClusterTable — Redis 远程表</h2><p><strong>头文件</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/plugins/redis/include/redis_cluster_table.hpp"><code>plugins/redis/include/redis_cluster_table.hpp</code></a> | <strong>注册名</strong>：<code>redis_cluster</code></p>
+<h3 id="架构-1"><a href="#架构-1" class="headerlink" title="架构"></a>架构</h3><p>RedisClusterTable 是 NVE 中<strong>唯一基于网络通信</strong>的表实现。它通过 hiredis（C 客户端）和 redis++（C++ 客户端）连接到外部 Redis Cluster，将嵌入向量以序列化形式存储在 Redis 中。</p>
+<h3 id="配置-1"><a href="#配置-1" class="headerlink" title="配置"></a>配置</h3><table>
+<thead>
+<tr>
+<th>字段</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>address</code></td>
+<td><code>localhost:6379</code></td>
+<td>Redis 集群任意节点地址</td>
+</tr>
+<tr>
+<td><code>user_name</code></td>
+<td><code>default</code></td>
+<td>用户名</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>空</td>
+<td>密码</td>
+</tr>
+<tr>
+<td><code>connections_per_node</code></td>
+<td>5</td>
+<td>每节点最大并行连接数</td>
+</tr>
+<tr>
+<td><code>connection_lifetime</code></td>
+<td>180s</td>
+<td>连接生命周期</td>
+</tr>
+<tr>
+<td><code>max_batch_size</code></td>
+<td>16384</td>
+<td>批量操作最大大小</td>
+</tr>
+<tr>
+<td><code>num_partitions</code></td>
+<td>1</td>
+<td>并行分片数（2 的幂）</td>
+</tr>
+</tbody></table>
+<h3 id="查找实现"><a href="#查找实现" class="headerlink" title="查找实现"></a>查找实现</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">auto</span> reply <span class="token operator">=</span> redis_cluster_<span class="token operator">-></span><span class="token function">pipeline</span><span class="token punctuation">(</span>keys<span class="token punctuation">.</span><span class="token function">begin</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> keys<span class="token punctuation">.</span><span class="token function">end</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token keyword">const</span> <span class="token keyword">auto</span><span class="token operator">&amp;</span> key<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span> <span class="token keyword">return</span> sw<span class="token double-colon punctuation">::</span>redis<span class="token double-colon punctuation">::</span><span class="token function">command</span><span class="token punctuation">(</span><span class="token string">"GET"</span><span class="token punctuation">,</span> key<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<p>对于每个分片，使用 redis++ 的 pipeline 功能批量发送 <code>GET</code> 命令，减少网络往返次数。</p>
+<h3 id="链接依赖"><a href="#链接依赖" class="headerlink" title="链接依赖"></a>链接依赖</h3><p><code>hiredis</code> + <code>hiredis_ssl</code> + <code>redis++_static</code> + <code>ssl</code> + <code>crypto</code></p>
+<hr>
+<h2 id="九、RocksDBTable-—-磁盘持久化表"><a href="#九、RocksDBTable-—-磁盘持久化表" class="headerlink" title="九、RocksDBTable — 磁盘持久化表"></a>九、RocksDBTable — 磁盘持久化表</h2><p><strong>头文件</strong>：<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/plugins/rocksdb/include/rocksdb_table.hpp"><code>plugins/rocksdb/include/rocksdb_table.hpp</code></a> | <strong>注册名</strong>：<code>rocksdb</code></p>
+<h3 id="架构-2"><a href="#架构-2" class="headerlink" title="架构"></a>架构</h3><p>RocksDBTable 通过 Facebook RocksDB 提供本地磁盘持久化存储。嵌入向量以 <code>key → value</code> 形式存储在 RocksDB 的 Column Family 中。</p>
+<h3 id="配置-2"><a href="#配置-2" class="headerlink" title="配置"></a>配置</h3><table>
+<thead>
+<tr>
+<th>字段</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>column_family</code></td>
+<td><code>default</code></td>
+<td>RocksDB Column Family</td>
+</tr>
+<tr>
+<td><code>max_batch_size</code></td>
+<td>16384</td>
+<td>批量操作最大大小</td>
+</tr>
+<tr>
+<td><code>verify_checksums</code></td>
+<td>true</td>
+<td>是否校验 checksum</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td><code>/tmp/rocksdb</code></td>
+<td>数据库文件路径</td>
+</tr>
+<tr>
+<td><code>read_only</code></td>
+<td>false</td>
+<td>只读模式（允许多进程并发读取）</td>
+</tr>
+<tr>
+<td><code>num_threads</code></td>
+<td>16</td>
+<td>后台线程数</td>
+</tr>
+</tbody></table>
+<h3 id="查找实现-1"><a href="#查找实现-1" class="headerlink" title="查找实现"></a>查找实现</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">db_<span class="token operator">-></span><span class="token function">MultiGet</span><span class="token punctuation">(</span>read_opts_<span class="token punctuation">,</span> col_families_<span class="token punctuation">,</span> keys_slices<span class="token punctuation">,</span> <span class="token operator">&amp;</span>values<span class="token punctuation">,</span> <span class="token operator">&amp;</span>statuses<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>使用 RocksDB 的 <code>MultiGet</code> 实现批量读取，单次调用返回多个键的状态。</p>
+<hr>
+<h2 id="十、所有-Table-的对比总表"><a href="#十、所有-Table-的对比总表" class="headerlink" title="十、所有 Table 的对比总表"></a>十、所有 Table 的对比总表</h2><table>
+<thead>
+<tr>
+<th>维度</th>
+<th>GpuTable</th>
+<th>LinearHostTable</th>
+<th>STLContainer</th>
+<th>AbseilFlatMap</th>
+<th>PHMapFlatMap</th>
+<th>NvhmMapTable</th>
+<th>RedisCluster</th>
+<th>RocksDB</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>存储位置</strong></td>
+<td>GPU 显存</td>
+<td>CPU 线性内存</td>
+<td>CPU 堆内存</td>
+<td>CPU 堆内存</td>
+<td>CPU 堆内存</td>
+<td>CPU 堆内存</td>
+<td>远程集群</td>
+<td>本地磁盘</td>
+</tr>
+<tr>
+<td><strong>数据持久化</strong></td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>查找算法</strong></td>
+<td>集合关联 tag</td>
+<td><code>key * stride</code></td>
+<td><code>unordered_map</code> O(1)</td>
+<td>Swiss Table O(1)</td>
+<td>PHMAP O(1)</td>
+<td>nvhashmap O(1)</td>
+<td>Redis GET</td>
+<td>LSM-Tree</td>
+</tr>
+<tr>
+<td><strong>并发粒控</strong></td>
+<td>CUDA stream</td>
+<td>线程池并行</td>
+<td>分片读写锁</td>
+<td>分片读写锁</td>
+<td>分片读写锁</td>
+<td>分片读写锁</td>
+<td>pipeline + 连接池</td>
+<td>RocksDB 内部</td>
+</tr>
+<tr>
+<td><strong>淘汰策略</strong></td>
+<td>集合关联 LRU</td>
+<td>无（固定数组）</td>
+<td>EvictRandom&#x2F;LRU&#x2F;LFU</td>
+<td>同左</td>
+<td>同左</td>
+<td>同左</td>
+<td>无（Redis 自管）</td>
+<td>无（磁盘存储）</td>
+</tr>
+<tr>
+<td><strong>是否插件</strong></td>
+<td>核心库内置</td>
+<td>核心库内置</td>
+<td>核心库内置</td>
+<td>✅ abseil 插件</td>
+<td>✅ phmap 插件</td>
+<td>✅ nvhm 插件</td>
+<td>✅ redis 插件</td>
+<td>✅ rocksdb 插件</td>
+</tr>
+<tr>
+<td><strong>启动依赖</strong></td>
+<td>CUDA + nvhashmap</td>
+<td>无</td>
+<td>无</td>
+<td>absl</td>
+<td>PHMAP header-only</td>
+<td>nvhashmap</td>
+<td>hiredis + redis++</td>
+<td>librocksdb</td>
+</tr>
+<tr>
+<td><strong>JSON 实现名</strong></td>
+<td>—</td>
+<td>—</td>
+<td>stl_map&#x2F;umap</td>
+<td>abseil_flat_map</td>
+<td>phmap_flat_map</td>
+<td>nvhm_map</td>
+<td>redis_cluster</td>
+<td>rocksdb</td>
+</tr>
+<tr>
+<td><strong>典型扮演角色</strong></td>
+<td>层级首表</td>
+<td>层级中&#x2F;末表</td>
+<td>层级中层</td>
+<td>层级中层</td>
+<td>层级中层</td>
+<td>层级中层</td>
+<td>层级末表</td>
+<td>层级末表</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="十一、在嵌入层中的角色总结"><a href="#十一、在嵌入层中的角色总结" class="headerlink" title="十一、在嵌入层中的角色总结"></a>十一、在嵌入层中的角色总结</h2><pre class="line-numbers language-none"><code class="language-none">HierarchicalEmbeddingLayer:
+  tables[0] ─── GpuTable (GPU cache, 最快层)
+  tables[1] ─── NvhmMapTable &#x2F; AbseilFlatMapTable &#x2F; STLContainerTable (CPU hash, 中间层)
+  tables[2] ─── RedisClusterTable &#x2F; RocksDBTable (远程&#x2F;持久化, 末层)
+
+LinearUVMEmbeddingLayer:
+  GpuTable.cache_ &#x3D; EmbedCacheSA (GPU cache)
+  GpuTable.config_.uvm_table &#x3D; UVM 线性内存 (硬件透明回退)
+
+GPUEmbeddingLayer:
+  无 Table (直接 cuEmbed Forward kernel, 线性 GPU 内存)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/NVIDIA/" rel="tag"># NVIDIA</a>
+              <a href="/tags/Embedding/" rel="tag"># Embedding</a>
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/NVEmbeddingCache/" rel="tag"># NVEmbeddingCache</a>
+              <a href="/tags/Table/" rel="tag"># Table</a>
+              <a href="/tags/CPU/" rel="tag"># CPU</a>
+              <a href="/tags/Redis/" rel="tag"># Redis</a>
+              <a href="/tags/RocksDB/" rel="tag"># RocksDB</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/ff05b45.html" rel="prev" title="hierarchical-embedding-layer">
+                  <i class="fa fa-angle-left"></i> hierarchical-embedding-layer
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/c7d29735.html" rel="next" title="plugin-system">
+                  plugin-system <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

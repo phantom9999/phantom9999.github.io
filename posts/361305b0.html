@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="本文介绍如何使用jeprof定位服务内存泄漏问题。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="使用jeprof定位内存泄漏">
+<meta property="og:url" content="https://phantom9999.github.io/posts/361305b0.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="本文介绍如何使用jeprof定位服务内存泄漏问题。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://phantom9999.github.io/images/jeprof_img.png">
+<meta property="article:published_time" content="2021-10-18T23:29:39.000Z">
+<meta property="article:modified_time" content="2021-10-18T23:29:39.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="boost">
+<meta property="article:tag" content="c++">
+<meta property="article:tag" content="jemalloc">
+<meta property="article:tag" content="jeprof">
+<meta property="article:tag" content="memory leak">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://phantom9999.github.io/images/jeprof_img.png">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/361305b0.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/361305b0.html","path":"posts/361305b0.html","title":"使用jeprof定位内存泄漏"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>使用jeprof定位内存泄漏 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#jeprof%E4%BB%8B%E7%BB%8D"><span class="nav-number">1.1.</span> <span class="nav-text">jeprof介绍</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%BC%93%E6%85%A2%E5%86%85%E5%AD%98%E6%B3%84%E6%BC%8F%E5%AE%9A%E4%BD%8D%E6%96%B9%E6%A1%88"><span class="nav-number">2.</span> <span class="nav-text">缓慢内存泄漏定位方案</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%A4%BA%E4%BE%8B%E6%9C%8D%E5%8A%A1%E4%BB%8B%E7%BB%8D"><span class="nav-number">2.1.</span> <span class="nav-text">示例服务介绍</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#dump%E6%8E%A5%E5%8F%A3%E5%BC%80%E5%8F%91"><span class="nav-number">2.2.</span> <span class="nav-text">dump接口开发</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8E%A5%E5%8F%A3%E4%BD%BF%E7%94%A8%E4%B8%8E%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90"><span class="nav-number">2.3.</span> <span class="nav-text">接口使用与数据分析</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%BF%AB%E9%80%9Foom%E5%AE%9A%E4%BD%8D%E6%96%B9%E6%A1%88"><span class="nav-number">3.</span> <span class="nav-text">快速oom定位方案</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%8F%82%E8%80%83"><span class="nav-number">4.</span> <span class="nav-text">参考</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/361305b0.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="使用jeprof定位内存泄漏 | phantom9999的博客">
+      <meta itemprop="description" content="本文介绍如何使用jeprof定位服务内存泄漏问题。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          使用jeprof定位内存泄漏
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2021-10-18 23:29:39" itemprop="dateCreated datePublished" datetime="2021-10-18T23:29:39+00:00">2021-10-18</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/cpp-devel/" itemprop="url" rel="index"><span itemprop="name">cpp-devel</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">本文介绍如何使用jeprof定位服务内存泄漏问题。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>本文将介绍基于jeprof定位内存泄漏问题，支持缓慢内存泄漏场景、瞬间oom场景等。</p>
+<h2 id="jeprof介绍"><a href="#jeprof介绍" class="headerlink" title="jeprof介绍"></a>jeprof介绍</h2><p>jeprof是jemalloc提供的一个内存优化的工具，jemalloc是facebook开源的内存管理工具，类似ptmalloc和tcmalloc，在多线程场景具有较好的性能。<br>默认情况下编译jemalloc后并没有jeprof工具，需要在编译时添加<code>--enable-prof</code>参数，然后在编译目录的bin目录中就能找到jeprof程序。<br>开启prof功能的jemalloc根据环境变量MALLOC_CONF和mallctl接口操作prof功能。<br>MALLOC_CONF变量接收的参数参考<span class="exturl" data-url="aHR0cDovL2plbWFsbG9jLm5ldC9qZW1hbGxvYy4zLmh0bWw=">jemalloc prof功能<i class="fa fa-external-link-alt"></i></span>。</p>
+<h1 id="缓慢内存泄漏定位方案"><a href="#缓慢内存泄漏定位方案" class="headerlink" title="缓慢内存泄漏定位方案"></a>缓慢内存泄漏定位方案</h1><p>这个方案适用于服务内存泄漏不是特别快，从服务启动完毕到oom的时间大于30秒以上，开发者有充足的时间去触发dump。<br>这个方案是在服务中添加dump接口，然后让开发在服务启动完毕(数据字典、索引加载完毕)后，触发一次dump，然后刷一定流量后，再触发一次dump，对比两次dump前后内存差，确定内存泄漏的位置。</p>
+<p>需要注意的是，这种方法一定要服务启动完毕，不然服务启动过程中加载的数据就会在diff结果中，影响判断。<br>其次，这种方法需要要求开发者把服务里的cache关闭，cache的存在也会影响diff结果的判断。</p>
+<h2 id="示例服务介绍"><a href="#示例服务介绍" class="headerlink" title="示例服务介绍"></a>示例服务介绍</h2><p>示例服务是一个基于beast开发的一个webservice，使用cmake构建，使用conan管理依赖，代码可以在<span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5L21pdGhyaWwvdHJlZS9tYWluL2plcHJvZl9pbl91c2U=">github地址<i class="fa fa-external-link-alt"></i></span>上找到。<br>这个webservice提供两个接口，一个是正常返回数据的接口，一个是内存泄漏的接口。内存泄漏的接口用于模拟内存泄漏的场景。<br>采用http协议的服务是因为http服务测试起来方便，不需要手写客户端。</p>
+<p>项目的conan配置(conanfile.txt)内容如下:</p>
+<pre class="line-numbers language-none"><code class="language-none">[build_requires]
+
+[requires]
+boost&#x2F;1.77.0
+jemalloc&#x2F;5.2.1
+glog&#x2F;0.5.0
+
+[generators]
+cmake
+
+[options]
+jemalloc:enable_prof&#x3D;True<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>beast是boost中的一个库，glog是日志库，下文用来分析内存泄漏的工具jeprof在jemalloc库中，需要注意的是options中jemalloc的prof已经要手工开启，默认是不开启的。</p>
+<p>这个webservice参考beast的“高级服务器”代码实现的，正常的接口的路径是“&#x2F;”，逻辑如下：</p>
+<pre class="line-numbers language-none"><code class="language-none">std::string HttpSession::processNormal() &#123;
+    LOG(INFO) &lt;&lt; &quot;visit&quot;;
+    return &quot;use http:&#x2F;&#x2F;www.webgraphviz.com&#x2F; &quot;;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<p>其功能就是打个日志，然后输出一句话。</p>
+<p>内存泄漏的接口路径为”&#x2F;leak”，其逻辑如下:</p>
+<pre class="line-numbers language-c++" data-language="c++"><code class="language-c++">std::string HttpSession::processLeak() &#123;
+    int32_t* leak &#x3D; new int32_t[1024*256];
+    LOG(INFO) &lt;&lt; &quot;leak address &quot; &lt;&lt; leak;
+    return &quot;memory leak&quot;;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>这个接口调用一次就泄漏1MB的内存。</p>
+<p>这个项目编译运行的步骤:</p>
+<pre class="line-numbers language-none"><code class="language-none"># 创建编译目录
+mkdir build;
+cd build;
+# 使用conan安装依赖
+conan install ..
+# 使用cmake构建
+cmake ..
+# 编译
+make
+# 运行
+.&#x2F;bin&#x2F;server<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="dump接口开发"><a href="#dump接口开发" class="headerlink" title="dump接口开发"></a>dump接口开发</h2><p>对于一些泄漏缓慢服务，使用定量dump的方式只会带来一堆的dump文件或者连dump文件都没有，影响泄漏定位效率。<br>为此，需要一种简单的手工触发dump的方式来协助定位内存泄漏。</p>
+<p>在现有服务中，添加一个手工触发dump的接口，即在新的接口里调用jemalloc的dump函数：</p>
+<pre class="line-numbers language-none"><code class="language-none">mallctl(&quot;prof.dump&quot;, nullptr, nullptr, nullptr, 0)<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>mallctl函数是操作调用函数，”prof.dump”是进行内存情况dump操作。</p>
+<p>实际代码可以参考<span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5L21pdGhyaWwvYmxvYi9tYWluL2plcHJvZl9pbl91c2Uvc3JjL2h0dHBfc2Vzc2lvbi5jcHA=">github代码<i class="fa fa-external-link-alt"></i></span>:</p>
+<pre class="line-numbers language-c++" data-language="c++"><code class="language-c++">std::string HttpSession::processDump() &#123;
+    if (mallctl(&quot;prof.dump&quot;, nullptr, nullptr, nullptr, 0) &#x3D;&#x3D; 0) &#123;
+        LOG(INFO) &lt;&lt; &quot;dump sucess&quot;;
+        return &quot;dump success&quot;;
+    &#125; else &#123;
+        LOG(INFO) &lt;&lt; &quot;dump sucess&quot;;
+        return &quot;dump fail&quot;;
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>上面接口为”&#x2F;dump”。</p>
+<h2 id="接口使用与数据分析"><a href="#接口使用与数据分析" class="headerlink" title="接口使用与数据分析"></a>接口使用与数据分析</h2><p>服务启动前设置环境变量<code>MALLOC_CONF=&#39;prof:true,prof_prefix:jemalloc&#39;</code> 开启prof功能。</p>
+<p>服务启动并加载完数据后，调用dump接口生成一份基准的内存分析数据，在本例子中，使用下面命令即可:</p>
+<pre class="line-numbers language-bash" data-language="bash"><code class="language-bash"><span class="token function">curl</span> <span class="token string">'http://localhost:8080/dump'</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>然后调用内存泄漏的接口，模拟内存泄漏，命令如下:</p>
+<pre class="line-numbers language-bash" data-language="bash"><code class="language-bash"><span class="token function">curl</span> <span class="token string">'http://localhost:8080/leak'</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>多次调用内存泄漏的接口之后，再次调用dump接口，生成第二份内存分析数据。这时我们得到了两份数据，第一份是基准，文件名是“jemalloc.10391.0.m0.heap”，第二份是“jemalloc.10391.1.m1.heap”。接着我们使用jeprof工具来分析这两份数据，jeprof可以从conan下载的jemalloc中找到，命令如下:</p>
+<pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">jeprof <span class="token parameter variable">--dot</span> ./bin/server <span class="token parameter variable">--base</span><span class="token operator">=</span>jemalloc.10391.0.m0.heap jemalloc.10391.1.m1.heap<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>终端中会输出dot语法的图，将其贴到<span class="exturl" data-url="aHR0cDovL3d3dy53ZWJncmFwaHZpei5jb20v">在线dot绘图网站<i class="fa fa-external-link-alt"></i></span>，生成内存分配图，然后进行分析。</p>
+<p>样例数据可以在<a href="/images/jeprof_file.txt">这里</a>找到，生成的图如下:</p>
+<p><img data-src="/images/jeprof_img.png"></p>
+<p>从图中可以看到，两个快照比较多余部分（泄漏部分）的内存在”processLeak”函数中。</p>
+<h1 id="快速oom定位方案"><a href="#快速oom定位方案" class="headerlink" title="快速oom定位方案"></a>快速oom定位方案</h1><p>有时候某个流量触发了服务中的一个死循环，然后死循环里会申请内存，但这份内存需要在循环外的其他地方才会释放。<br>这时，服务就会出现瞬间oom的情况，速度之快，无法人工dump。</p>
+<p>面对这种情况，就要开启定量dump和推出dump，需要的参数如下:</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>prof:true</td>
+<td>启动profile</td>
+</tr>
+<tr>
+<td>prof_final:true</td>
+<td>表示退出时prof</td>
+</tr>
+<tr>
+<td>lg_prof_interval:N</td>
+<td>每流转 1 « N 个字节，将采样统计数据转储到文件</td>
+</tr>
+<tr>
+<td>prof_gdump:true</td>
+<td>打到新高dump</td>
+</tr>
+<tr>
+<td>prof_active:false</td>
+<td>不激活，用于手工激活</td>
+</tr>
+<tr>
+<td>lg_prof_sample:N</td>
+<td>平均每分配出 2^N 个字节 采一次样。当 N &#x3D; 0 时，意味着每次分配都采样</td>
+</tr>
+</tbody></table>
+<p>备注: lg_prof_sample是分配计数的采样频率，lg_prof_interval是分配统计，只有被计数了才会被打印。</p>
+<p>建议的prof环境变量设置:</p>
+<pre class="line-numbers language-none"><code class="language-none">export MALLOC_CONF&#x3D;&quot;prof_leak:true,lg_prof_sample:0,prof_final:true;lg_prof_interval:30&quot;<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>每分配1GB内存就打印一份数据，并且在服务退出时，也同时dump一份。<br>然后比较每份dump的数据的diff确认内存泄漏的位置。</p>
+<p>需要注意的是，这种方法也没法处理cache问题。</p>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><ul>
+<li><span class="exturl" data-url="aHR0cDovL2plbWFsbG9jLm5ldC9qZW1hbGxvYy4zLmh0bWw=">jemalloc prof功能<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cDovL3d3dy53ZWJncmFwaHZpei5jb20v">dot可视化<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly93d3cueXVhbmd1b2h1by5jb20vMjAxOS8wMS8wMi9qZW1hbGxvYy1oZWFwLXByb2ZpbGluZy8=">jemalloc的heap profiling<i class="fa fa-external-link-alt"></i></span></li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/c/" rel="tag"># c++</a>
+              <a href="/tags/boost/" rel="tag"># boost</a>
+              <a href="/tags/jemalloc/" rel="tag"># jemalloc</a>
+              <a href="/tags/jeprof/" rel="tag"># jeprof</a>
+              <a href="/tags/memory-leak/" rel="tag"># memory leak</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/fa9b04c2.html" rel="prev" title="基于CLion远程开发">
+                  <i class="fa fa-angle-left"></i> 基于CLion远程开发
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/cd6cc41b.html" rel="next" title="基于protobuf的配置系统">
+                  基于protobuf的配置系统 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

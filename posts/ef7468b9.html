@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="简介准备写几个文章来记录对tensorflow代码的阅读。本文自顶向下介绍tensorflow-serving的架构，着重介绍一下模型管理及加载机制。 整体架构">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tensorflow-serving--模型管理">
+<meta property="og:url" content="https://phantom9999.github.io/posts/ef7468b9.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="简介准备写几个文章来记录对tensorflow代码的阅读。本文自顶向下介绍tensorflow-serving的架构，着重介绍一下模型管理及加载机制。 整体架构">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://phantom9999.github.io/images/tfserving-tf-serving_arch.jpg">
+<meta property="og:image" content="https://phantom9999.github.io/images/tf_model.jpg">
+<meta property="og:image" content="https://phantom9999.github.io/images/tf_model_1.jpg">
+<meta property="article:published_time" content="2022-06-14T22:46:08.000Z">
+<meta property="article:modified_time" content="2022-06-14T22:46:08.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="c++">
+<meta property="article:tag" content="serving">
+<meta property="article:tag" content="tensorflow">
+<meta property="article:tag" content="推理">
+<meta property="article:tag" content="模型">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://phantom9999.github.io/images/tfserving-tf-serving_arch.jpg">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/ef7468b9.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/ef7468b9.html","path":"posts/ef7468b9.html","title":"tensorflow-serving--模型管理"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>tensorflow-serving--模型管理 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%95%B4%E4%BD%93%E6%9E%B6%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">整体架构</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%B5%84%E6%BA%90%E4%BA%A4%E4%BA%92"><span class="nav-number">3.</span> <span class="nav-text">资源交互</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E7%AE%A1%E7%90%86"><span class="nav-number">4.</span> <span class="nav-text">模型管理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E9%85%8D%E7%BD%AE%E7%83%AD%E5%8A%A0%E8%BD%BD"><span class="nav-number">4.1.</span> <span class="nav-text">模型配置热加载</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%E4%BE%A6%E6%B5%8B"><span class="nav-number">4.2.</span> <span class="nav-text">模型版本侦测</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E5%8A%A0%E8%BD%BD%E5%8D%B8%E8%BD%BD"><span class="nav-number">4.3.</span> <span class="nav-text">模型加载卸载</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#AspiredVersionsManager%E7%B1%BB"><span class="nav-number">4.3.1.</span> <span class="nav-text">AspiredVersionsManager类</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#pending-aspired-versions-requests-%E5%AD%98%E5%82%A8%E7%AD%89%E5%BE%85%E5%A4%84%E7%90%86%E9%98%9F%E5%88%97%EF%BC%8C%E8%B0%83%E7%94%A8%E5%85%B3%E7%B3%BB%E6%9C%89%E7%82%B9%E7%BB%95"><span class="nav-number">4.4.</span> <span class="nav-text">pending_aspired_versions_requests_存储等待处理队列，调用关系有点绕:</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#BasicMananger%E7%B1%BB"><span class="nav-number">4.4.1.</span> <span class="nav-text">BasicMananger类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#servable%E7%B1%BB"><span class="nav-number">4.4.2.</span> <span class="nav-text">servable类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9B%B4%E6%96%B0%E6%B5%81%E7%A8%8B"><span class="nav-number">4.4.3.</span> <span class="nav-text">更新流程</span></a></li></ol></li></ol></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/ef7468b9.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="tensorflow-serving--模型管理 | phantom9999的博客">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          tensorflow-serving--模型管理
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-06-14 22:46:08" itemprop="dateCreated datePublished" datetime="2022-06-14T22:46:08+00:00">2022-06-14</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/inference/" itemprop="url" rel="index"><span itemprop="name">inference</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>准备写几个文章来记录对tensorflow代码的阅读。<br>本文自顶向下介绍tensorflow-serving的架构，着重介绍一下模型管理及加载机制。</p>
+<h1 id="整体架构"><a href="#整体架构" class="headerlink" title="整体架构"></a>整体架构</h1><p>tensorflow-serving（下文简称tfserving）是对tensorflow的封装，对外提供服务接口，关系类似lucene与es。<br>tfserving整体可以分为三层，接口层、模型管理层、tf引擎层，如下图所示:</p>
+<p><img data-src="/images/tfserving-tf-serving_arch.jpg"></p>
+<p>tfserving使用grpc作为服务框架，提供在线推理和模型状态查询的接口。与此同时，基于libevent实现了一个http服务，除了在线推理和模型状态查询接口外，还提供了prometheus接口用于监控。</p>
+<p>模型管理层是serving的核心部分，负责维护模型的生命周期，重要的组件包括AspiredVersionsManager、BasicMananger、Adapter、Router、StoragePathSource等，下文将着重介绍。</p>
+<p>tf引擎层实际是对tensorflow的封装，tfserving将其封装为Servable，通过模型名及其版本确认对应的模型，即三元组(name, version, model)。</p>
+<h1 id="资源交互"><a href="#资源交互" class="headerlink" title="资源交互"></a>资源交互</h1><p>这部分讲一下从请求到来到推理进行里过程。<br>以推理为例子，调用层次如下:</p>
+<ol>
+<li>PredictionServiceImpl::Predict调用TensorflowPredictor::Predict进行预估</li>
+<li>TensorflowPredictor::Predict调用TensorflowPredictor::PredictWithModelSpec进行预估<ol>
+<li>调用ServerCore::GetServableHandle获取SavedModelBundle<ol>
+<li>调用ServerCore::ServableRequestFromModelSpec构建查询包</li>
+<li>调用AspiredVersionsManager::GetServableHandle获得servable<ul>
+<li>AspiredVersionsManager::GetUntypedServableHandle 调用</li>
+<li>BasicManager::GetUntypedServableHandle 调用<ul>
+<li>ServingMap::GetUntypedServableHandle</li>
+</ul>
+<ol>
+<li>根据ServableRequest查询HandlesMap获取对应的LoaderHarness</li>
+<li>LoaderHarness取出Loader指针，使用SharedPtrHandle包裹后返回。</li>
+</ol>
+</li>
+</ul>
+</li>
+</ol>
+</li>
+<li>调用internal::RunPredict进行预估<ol>
+<li>输入映射(PreProcessPrediction)</li>
+<li>执行Session::Run进行预估(已经在tensorflow代码里)</li>
+<li>输出打包(PostProcessPredictionResult)</li>
+</ol>
+</li>
+</ol>
+</li>
+</ol>
+<p>TensorflowPredictor类是对推理流程的封装，保障grpc和http接口都能进行推理。<br>ServerCore类承接服务和模型。</p>
+<p>ServerCore下的组件:</p>
+<ul>
+<li>AspiredVersionsManager 负责装载策略，控制装载卸载的模型版本<ul>
+<li>BasicMananger 资源管理，提供资源管理、资源托管、资源装载卸载功能</li>
+</ul>
+</li>
+<li>ServableStateMonitor 状态监视器，处理状态变化，并触发回调。</li>
+<li>EventBus 消息总线，连接ServableStateMonitor和AspiredVersionsManager。</li>
+<li>StoragePathSourceAndRouter</li>
+<li>ResourceTracker</li>
+</ul>
+<h1 id="模型管理"><a href="#模型管理" class="headerlink" title="模型管理"></a>模型管理</h1><p>tfserving模型管理功能包括三个部分，模型配置热加载、模型版本侦测、模型加载卸载。</p>
+<p>tfserving支持单模型和多模型两种模式，单模型通过入参控制加载的模型；多模型通过配置文件控制模型名、模型路径等。<br>模型配置热加载机制是针对多模型模式。</p>
+<p>tfserving在这部分抽象了很多层，其目标是支持多种文件系统、支持多个平台(tf或者其他)、支持多个模型、支持模型的多个版本。考虑到这点就不难理解这个多层设计了。 </p>
+<h2 id="模型配置热加载"><a href="#模型配置热加载" class="headerlink" title="模型配置热加载"></a>模型配置热加载</h2><p>模型配置热加载机制是创建一个定时线程，按照入参配置的时间间隔，读取指定的配置文件，然后调用ServerCore::ReloadConfig函数，重新加载模型配置。这个地方可能出现内存泄漏问题。</p>
+<p>创建定时线程的代码在<code>tensorflow_serving/model_servers/server.cc:343</code>;<br>配置读取逻辑在<code>tensorflow_serving/model_servers/server.cc:174</code>;<br>配置应用的逻辑在<code>tensorflow_serving/model_servers/server_core.cc:431</code>。</p>
+<p>配置应用逻辑里，会先校验配置内容，然后更新模型对应的配置信息(模型的路径)。</p>
+<h2 id="模型版本侦测"><a href="#模型版本侦测" class="headerlink" title="模型版本侦测"></a>模型版本侦测</h2><p>版本侦测就涉及到一套回调机制了，<code>Source<T>::AspiredVersionsCallback</code>，在代码serving-1.15.0&#x2F;tensorflow_serving&#x2F;core&#x2F;source.h:87。<br>上层对象将回调函数注册给下层对象，下层对象侦测到状态后，调用这个回调函数，然后将信息传递给上层对象。</p>
+<p>这里涉及到StoragePathSource、Router、Adapter、Manager等多个实例，他们之间的调用如下：</p>
+<pre class="line-numbers language-none"><code class="language-none">StoragePathSource --&gt; Router --&gt; Adapter --&gt; AspiredVersionManager<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>这里就牵扯到Source和Target关系了，即源和目标。Target提供回调函数给Source，Source按需调用该函数，回调绑定通过ConnectSourceToTarget连接。Router和Adapter既是Source又是Target。<br>ConnectSourcesWithFastInitialLoad中绑定了AspiredVersionManager和Adapter。<br>一个平台对应一个StoragePathSourceAdapter，存在SourceAdapters中。</p>
+<p>StoragePathSource是TFS定义的对未加载模型对象的抽象, 目前实现了两种Source, 一种是StaticStoragePathSource,一种是FileSystemStoragePathSource. 前者是简单的静态的模型文件存储系统, 仅仅在启动时触发模型的加载, 没有其他动作. 后者是动态的Source, 能监测存储系统的变化并发出通知.</p>
+<p>tfserving实现Source时将模块职责划分的很清晰, Source的职责就是监测变化, 如何处理则由Source的用户决定, 所以Source有一个接口SetAspiredVersionsCallback, 可以设置回调函数用于通知AspiredVersion的变化. Source在变化的时候就会调用设置的回调函数.</p>
+<p>作为Source的对等对象, 系统也定义了Target, 有接口GetAspiredVersionsCallback, 用于获取处理AspiredVersions的回调接口, 然后我们就可以将Target和Source连起来了.</p>
+<p>上述连接关系里面, Router和Adapter既是Source又是Target, AspiredVersionManager是Target. 但是Router没有实现Source接口, 而是要求在创建Router对象时直接将Adapter作为参数, 这样实现主要目的是创建一对多的关系.</p>
+<p>系统根据所支持平台的个数（tensorflow算是一种平台）创建Adapter, 一种平台对应一个Adapter, 负责创建模型加载器Loader. 对于tensorflow平台, 对应的adapter是SavedModelBundleSourceAdapter.</p>
+<p>Router负责根据模型名称查找对应的平台(model_config里面有指定平台名称), 从而定位到对应的Adapter.</p>
+<p>这些连接关系是在系统启动, 或者更新model-config的时候建立的.</p>
+<p>默认配置下, FileSystemStoragePathSource为Source的实例, SavedModelBundleSourceAdapter为Adapter的实例, DynamicSourceRouter为Router的实例.</p>
+<p>FileSystemStoragePathSource有自己单独的工作线程, 周期查询文件系统, 发现每个模型的版本, 根据指定的servable_version_policy(model_config), 创建ServableData(模型名, 版本号, 路径), 传给Router<br>Router根据路由找到对应的adapter, 传给Adataper<br>Adapter将ServableData(模型名, 版本号, 路径)转换成ServableData(模型名, 版本, Loader), 传给AspiredVersionManager<br>AspiredVersionManager将这些信息存到pending_aspired_versions_requests_, 等待另外一个工作线程(AspiredVersionsManager_ManageState_Thread)处理</p>
+<p>如下图左侧所示: </p>
+<p><img data-src="/images/tf_model.jpg"></p>
+<p>由于tfserving实际就 tensorflow这个平台，所以，上图实际情况如下图所示:</p>
+<p><img data-src="/images/tf_model_1.jpg"></p>
+<h2 id="模型加载卸载"><a href="#模型加载卸载" class="headerlink" title="模型加载卸载"></a>模型加载卸载</h2><p>模型的装在卸载就需要详细介绍一下AspiredVersionsManager、BasicMananger、servable类了。<br>AspiredVersionsManager是总控，一端连着版本发现，一端控制模型加载，内部有个更新线程进行将待更新队列中的数据取出，进行版本更新。<br>BasicMananger存粹是维护模型的版本数据；servable是存粹的模型版本。</p>
+<h3 id="AspiredVersionsManager类"><a href="#AspiredVersionsManager类" class="headerlink" title="AspiredVersionsManager类"></a>AspiredVersionsManager类</h3><p>AspiredVersionsManager负责装载策略，控制装载卸载的模型版本。<br>成员对象包括:</p>
+<ul>
+<li>aspired_version_policy_ 装载策略</li>
+<li>pending_aspired_versions_requests_ 待处理资源</li>
+<li>manage_state_thread_ 定时任务，负责处理状态</li>
+<li>target_impl_ 应该是IMPL模式对象</li>
+<li>basic_manager_ BasicMananger类对象，资源管理</li>
+<li>set_num_load_threads_observer_</li>
+</ul>
+<p>这个类对外(ServerCore)只提供了查询Servable的接口，用于获取模型。<br>这个类的对象创建之后，会启动一个后台线程去周期执行任务:</p>
+<ul>
+<li>FlushServables 清理（取消托管）无用或者状态有问题的资源</li>
+<li>HandlePendingAspiredVersionsRequests<ul>
+<li>当前资源正在卸载中的，跳过本次处理<ul>
+<li>之前出现镜像版本不在新增版本中 (应该是该版本本地数据被删除，但是还没被卸载)</li>
+<li>这次该版本出现在新增版本中</li>
+</ul>
+</li>
+<li>处理选中版本逻辑<ul>
+<li>获取新版本列表</li>
+<li>获取当前版本列表</li>
+<li>镜像版本不在新版本中，进行标记(本地数据已经被删除)</li>
+<li>获取差集(新版本 - 当前版本)进行托管</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>InvokePolicyAndExecuteAction 筛选一个操作(模型装载或卸载)，并执行<ul>
+<li>获取每个模型的每个版本的镜像状态</li>
+<li>针对每个模型，使用装载策略器筛选一个“操作”（至多一个）</li>
+<li>针对所有模型的“操作”，筛选(优先卸载)一个执行<br>  调用basic_manager的装载或者卸载接口进行操作。</li>
+</ul>
+</li>
+</ul>
+<h2 id="pending-aspired-versions-requests-存储等待处理队列，调用关系有点绕"><a href="#pending-aspired-versions-requests-存储等待处理队列，调用关系有点绕" class="headerlink" title="pending_aspired_versions_requests_存储等待处理队列，调用关系有点绕:"></a>pending_aspired_versions_requests_存储等待处理队列，调用关系有点绕:</h2><ul>
+<li>AspiredVersionsManagerTargetImpl::SetAspiredVersions</li>
+<li>AspiredVersionsManager::EnqueueAspiredVersionsRequest</li>
+<li>添加pending_aspired_versions_requests_</li>
+</ul>
+<p>装载策略:</p>
+<ul>
+<li>AvailabilityPreservingPolicy</li>
+<li>ResourcePreservingPolicy</li>
+</ul>
+<h3 id="BasicMananger类"><a href="#BasicMananger类" class="headerlink" title="BasicMananger类"></a>BasicMananger类</h3><p>BasicManager，负责资源管理，提供资源获取、资源托管、资源装载、资源卸载，主要结构如下:</p>
+<ul>
+<li>servable_event_bus_ 状态消息分发</li>
+<li>managed_map_ 已托管的资源表，multimap&lt;模型名, LoaderHarness_Ptr&gt;</li>
+<li>serving_map_ 就绪的模型表类，类型是ServingMap，里面也是multimap结构</li>
+<li>load_executor_和unload_executor_是装载、卸载的线程池</li>
+</ul>
+<p>BasicManager提供的接口:</p>
+<ul>
+<li>ManageServable 托管资源<ol>
+<li>从ServableData对象中取出Loader和ServableId，装入LoaderHarness</li>
+<li>发布消息&lt;ServableId, kStart&gt;</li>
+<li>加入managed_map_中进行管理</li>
+</ol>
+</li>
+<li>LoadServable 装载资源，资源必须被托管<ol>
+<li>构建LoadOrUnloadRequest对象</li>
+<li>获取LoaderHarness对象</li>
+<li>检查LoaderHarness对象是否已经装载</li>
+<li>调度进行装载，配置了线程池就用线程池<ol>
+<li>获取LoaderHarness对象</li>
+<li>预先分配资源</li>
+<li>修改资源状态为kLoadApproved</li>
+<li>发布事件kLoading</li>
+<li>调度LoaderHarness的Load函数进行装载</li>
+<li>更新ServingMap数据</li>
+<li>发布事件kAvailable</li>
+</ol>
+</li>
+</ol>
+</li>
+<li>UnloadServable 卸载资源<ol>
+<li>构建LoadOrUnloadRequest对象</li>
+<li>获取LoaderHarness对象</li>
+<li>检查LoaderHarness对象是否已经卸载</li>
+<li>调度进行卸载，配置了线程池就用线程池<ol>
+<li>获取LoaderHarness对象</li>
+<li>修改资源状态为kQuiescing</li>
+<li>发布事件kUnloading</li>
+<li>更新ServingMap数据</li>
+<li>修改新状态为kQuiesced</li>
+<li>调度LoaderHarness的Unload函数进行卸载</li>
+<li>发布事件kEnd</li>
+</ol>
+</li>
+</ol>
+</li>
+<li>StopManagingServable 取消托管资源<ol>
+<li>从managed_map_中删除资源</li>
+</ol>
+</li>
+<li>GetUntypedServableHandle 获取资源<ol>
+<li>从serving_map_中获取资源<ol>
+<li>查询unordered_multimap里查询LoaderHarness对象</li>
+<li>LoaderHarness中取出ServableId和Loader，装入SharedPtrHandle</li>
+</ol>
+</li>
+</ol>
+</li>
+<li>其他查询接就不介绍了</li>
+</ul>
+<h3 id="servable类"><a href="#servable类" class="headerlink" title="servable类"></a>servable类</h3><p>一个servable对应一个模型的一个版本，这里涉及到多个类:</p>
+<ul>
+<li>SavedModelBundle 实际模型<ul>
+<li>Session 对象</li>
+<li>meta_graph_def graph申明</li>
+</ul>
+</li>
+<li>ServableHandle 类似智能指针，但是不管理内存</li>
+<li>UntypedServableHandle 基类，定义了获取servable的句柄。</li>
+<li>SharedPtrHandle UntypedServableHandle的实现，从Loader中获取servable对象。</li>
+<li>ServableRequest 用来查询manager获得指定版本模型的阐述对象(Params)</li>
+</ul>
+<p>他们的关系是: manager中存了SharedPtrHandle对象，通过ServableRequest查询对应的SharedPtrHandle；使用时将获取的使用ServableHandle将获取的SharedPtrHandle对象中的Loader维护的SavedModelBundle取出。</p>
+<h3 id="更新流程"><a href="#更新流程" class="headerlink" title="更新流程"></a>更新流程</h3><p>AspiredVersionsManager对象从队列中取到版本，跟自身的版本进行比较，得到需要更新的版本数据。<br>AspiredVersionsManager调用BasicMananger::LoadServable，装载模型。<br>BasicMananger进行一连串调用之后，LoaderHarness、SimpleLoader等之后，就到tensorflow里的代码了。</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/c/" rel="tag"># c++</a>
+              <a href="/tags/tensorflow/" rel="tag"># tensorflow</a>
+              <a href="/tags/serving/" rel="tag"># serving</a>
+              <a href="/tags/%E6%A8%A1%E5%9E%8B/" rel="tag"># 模型</a>
+              <a href="/tags/%E6%8E%A8%E7%90%86/" rel="tag"># 推理</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/f4cfcd39.html" rel="prev" title="tensorflow源码阅读--前置准备">
+                  <i class="fa fa-angle-left"></i> tensorflow源码阅读--前置准备
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/ad28feb4.html" rel="next" title="tfserving模型策略整理">
+                  tfserving模型策略整理 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

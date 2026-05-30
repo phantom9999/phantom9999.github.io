@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="NV Embedding Cache SDK 多 GPU 与分布式部署深度分析 — UVM 共享、CUDA 虚拟内存管理、NVLink 分片、跨节点 IMEX、MPI 分布式环境。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="multi-gpu-deep">
+<meta property="og:url" content="https://phantom9999.github.io/posts/96878a9b.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="NV Embedding Cache SDK 多 GPU 与分布式部署深度分析 — UVM 共享、CUDA 虚拟内存管理、NVLink 分片、跨节点 IMEX、MPI 分布式环境。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-30T17:02:18.000Z">
+<meta property="article:modified_time" content="2026-05-30T17:02:18.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="CUDA">
+<meta property="article:tag" content="Distributed">
+<meta property="article:tag" content="Embedding">
+<meta property="article:tag" content="MPI">
+<meta property="article:tag" content="Multi-GPU">
+<meta property="article:tag" content="NVEmbeddingCache">
+<meta property="article:tag" content="NVIDIA">
+<meta property="article:tag" content="NVLink">
+<meta property="article:tag" content="UVM">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/96878a9b.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/96878a9b.html","path":"posts/96878a9b.html","title":"multi-gpu-deep"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>multi-gpu-deep | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%A4%9A-GPU-%E4%B8%8E%E5%88%86%E5%B8%83%E5%BC%8F%E9%83%A8%E7%BD%B2%E6%B7%B1%E5%BA%A6%E5%88%86%E6%9E%90"><span class="nav-number">1.</span> <span class="nav-text">多 GPU 与分布式部署深度分析</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A6%82%E8%BF%B0"><span class="nav-number">1.1.</span> <span class="nav-text">概述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E5%85%B1%E4%BA%AB%E5%9C%BA%E6%99%AF%E5%88%86%E7%B1%BB"><span class="nav-number">1.2.</span> <span class="nav-text">一、共享场景分类</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9C%BA%E6%99%AF-1%EF%BC%9A%E5%8D%95%E8%8A%82%E7%82%B9%E5%A4%9A-GPU-%E6%8E%A8%E7%90%86"><span class="nav-number">1.2.1.</span> <span class="nav-text">场景 1：单节点多 GPU 推理</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9C%BA%E6%99%AF-2%EF%BC%9A%E5%8D%95%E8%8A%82%E7%82%B9%E5%A4%9A-GPU-%E5%88%86%E7%89%87"><span class="nav-number">1.2.2.</span> <span class="nav-text">场景 2：单节点多 GPU 分片</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9C%BA%E6%99%AF-3%EF%BC%9A%E5%A4%9A%E8%8A%82%E7%82%B9%E5%88%86%E7%89%87"><span class="nav-number">1.2.3.</span> <span class="nav-text">场景 3：多节点分片</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E3%80%81GPUEmbeddingLayer-%E2%80%94-%E6%8C%87%E9%92%88%E5%85%B1%E4%BA%AB"><span class="nav-number">1.3.</span> <span class="nav-text">二、GPUEmbeddingLayer — 指针共享</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E3%80%81LinearUVMEmbeddingLayer-%E2%80%94-UVM-%E8%A1%A8%E5%85%B1%E4%BA%AB"><span class="nav-number">1.4.</span> <span class="nav-text">三、LinearUVMEmbeddingLayer — UVM 表共享</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Host-%E5%86%85%E5%AD%98%E5%85%B1%E4%BA%AB%EF%BC%88%E5%8D%95%E8%8A%82%E7%82%B9%EF%BC%89"><span class="nav-number">1.4.1.</span> <span class="nav-text">Host 内存共享（单节点）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Python-ManagedMemBlock"><span class="nav-number">1.4.2.</span> <span class="nav-text">Python ManagedMemBlock</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E3%80%81CUDADistributedBuffer-%E2%80%94-CUDA-%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86"><span class="nav-number">1.5.</span> <span class="nav-text">四、CUDADistributedBuffer — CUDA 虚拟内存管理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5"><span class="nav-number">1.5.1.</span> <span class="nav-text">核心概念</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9E%84%E9%80%A0%E5%87%BD%E6%95%B0%E6%B5%81%E7%A8%8B"><span class="nav-number">1.5.2.</span> <span class="nav-text">构造函数流程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8D%95%E8%8A%82%E7%82%B9%E5%88%9D%E5%A7%8B%E5%8C%96%EF%BC%88init-single-host%EF%BC%89"><span class="nav-number">1.5.3.</span> <span class="nav-text">单节点初始化（init_single_host）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%9A%E8%8A%82%E7%82%B9%E5%88%9D%E5%A7%8B%E5%8C%96%EF%BC%88init-multi-host%EF%BC%89"><span class="nav-number">1.5.4.</span> <span class="nav-text">多节点初始化（init_multi_host）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9E%90%E6%9E%84%E5%87%BD%E6%95%B0"><span class="nav-number">1.5.5.</span> <span class="nav-text">析构函数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%94%E3%80%81MPI-%E5%88%86%E5%B8%83%E5%BC%8F%E7%8E%AF%E5%A2%83"><span class="nav-number">1.6.</span> <span class="nav-text">五、MPI 分布式环境</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#DistributedEnv-%E6%8E%A5%E5%8F%A3"><span class="nav-number">1.6.1.</span> <span class="nav-text">DistributedEnv 接口</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#collect-devices"><span class="nav-number">1.6.2.</span> <span class="nav-text">collect_devices()</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AD%E3%80%81Python-%E7%AB%AF%E7%9A%84-MemBlock-%E7%B3%BB%E5%88%97"><span class="nav-number">1.7.</span> <span class="nav-text">六、Python 端的 MemBlock 系列</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B1%BB%E5%B1%82%E6%AC%A1"><span class="nav-number">1.7.1.</span> <span class="nav-text">类层次</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#MPIMemBlock%EF%BC%88Python%EF%BC%89"><span class="nav-number">1.7.2.</span> <span class="nav-text">MPIMemBlock（Python）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#NVLMemBlock%EF%BC%88Python%EF%BC%89"><span class="nav-number">1.7.3.</span> <span class="nav-text">NVLMemBlock（Python）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E7%A7%8D-NoCache-%E8%B7%AF%E5%BE%84"><span class="nav-number">1.7.4.</span> <span class="nav-text">两种 NoCache 路径</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%83%E3%80%81%E6%95%B0%E6%8D%AE%E7%AB%9E%E4%BA%89%E4%B8%8E%E8%AF%BB%E5%86%99%E5%AE%89%E5%85%A8"><span class="nav-number">1.8.</span> <span class="nav-text">七、数据竞争与读写安全</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%AA%E8%AF%BB%E5%9C%BA%E6%99%AF"><span class="nav-number">1.8.1.</span> <span class="nav-text">只读场景</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%86%99%E5%85%A5%E5%9C%BA%E6%99%AF"><span class="nav-number">1.8.2.</span> <span class="nav-text">写入场景</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Cache-%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98"><span class="nav-number">1.8.3.</span> <span class="nav-text">Cache 一致性问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AB%E3%80%81%E6%80%A7%E8%83%BD%E7%89%B9%E5%BE%81%E5%AF%B9%E6%AF%94"><span class="nav-number">1.9.</span> <span class="nav-text">八、性能特征对比</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%96%B9%E6%A1%88%E6%80%BB%E7%BB%93"><span class="nav-number">1.9.1.</span> <span class="nav-text">方案总结</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%9A-GPU-%E5%9F%BA%E5%87%86%E6%B5%8B%E8%AF%95"><span class="nav-number">1.9.2.</span> <span class="nav-text">多 GPU 基准测试</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B9%9D%E3%80%81%E6%9C%AF%E8%AF%AD%E8%A1%A8%EF%BC%88GLOSSARY%EF%BC%89"><span class="nav-number">1.10.</span> <span class="nav-text">九、术语表（GLOSSARY）</span></a></li></ol></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/96878a9b.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="multi-gpu-deep | phantom9999的博客">
+      <meta itemprop="description" content="NV Embedding Cache SDK 多 GPU 与分布式部署深度分析 — UVM 共享、CUDA 虚拟内存管理、NVLink 分片、跨节点 IMEX、MPI 分布式环境。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          multi-gpu-deep
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2026-05-30 17:02:18" itemprop="dateCreated datePublished" datetime="2026-05-30T17:02:18+00:00">2026-05-30</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/inference/" itemprop="url" rel="index"><span itemprop="name">inference</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">NV Embedding Cache SDK 多 GPU 与分布式部署深度分析 — UVM 共享、CUDA 虚拟内存管理、NVLink 分片、跨节点 IMEX、MPI 分布式环境。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="多-GPU-与分布式部署深度分析"><a href="#多-GPU-与分布式部署深度分析" class="headerlink" title="多 GPU 与分布式部署深度分析"></a>多 GPU 与分布式部署深度分析</h1><h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h2><p>当单个 GPU 的显存无法容纳完整嵌入表，或需要在多块 GPU &#x2F; 多节点上部署相同模型时，NVE 提供了多种资源共享和分片方案。本文档从原理到代码实现，详细分析每种方案的设计和用法。</p>
+<p>核心理念：<strong>嵌入层之间不共享 GPU 缓存；共享仅限于更大的后备存储资源。</strong></p>
+<hr>
+<h2 id="一、共享场景分类"><a href="#一、共享场景分类" class="headerlink" title="一、共享场景分类"></a>一、共享场景分类</h2><h3 id="场景-1：单节点多-GPU-推理"><a href="#场景-1：单节点多-GPU-推理" class="headerlink" title="场景 1：单节点多 GPU 推理"></a>场景 1：单节点多 GPU 推理</h3><p>同一节点部署同一模型的多个副本（每个 GPU 一个），各副本读取相同嵌入数据。共享方案：</p>
+<table>
+<thead>
+<tr>
+<th>嵌入层类型</th>
+<th>C++</th>
+<th>Python</th>
+<th>共享方式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GPUEmbeddingLayer</td>
+<td>同一 <code>embedding_table</code> 指针</td>
+<td>不支持（每个 NVEmbedding 独立权重）</td>
+<td>指向同一 GPU&#x2F;Host 缓冲区</td>
+</tr>
+<tr>
+<td>LinearUVMEmbeddingLayer</td>
+<td>同一 <code>uvm_table</code> 指针</td>
+<td>同一 <code>ManagedMemBlock</code></td>
+<td>UVM 后备表在 Host 内存或跨 GPU 映射</td>
+</tr>
+<tr>
+<td>HierarchicalEmbeddingLayer</td>
+<td>同一 host table &#x2F; remote PS</td>
+<td>暂不支持 host table 共享</td>
+<td>参数服务器天然共享</td>
+</tr>
+</tbody></table>
+<h3 id="场景-2：单节点多-GPU-分片"><a href="#场景-2：单节点多-GPU-分片" class="headerlink" title="场景 2：单节点多 GPU 分片"></a>场景 2：单节点多 GPU 分片</h3><p>将一个大嵌入表按行分片到多个 GPU，每个 GPU 拥有一部分物理内存，但所有分片映射到统一虚拟地址空间。</p>
+<h3 id="场景-3：多节点分片"><a href="#场景-3：多节点分片" class="headerlink" title="场景 3：多节点分片"></a>场景 3：多节点分片</h3><p>跨节点共享嵌入表，通过 IMEX（Inter-Node Memory Extension）通道 + NVLink Fabric 实现。</p>
+<hr>
+<h2 id="二、GPUEmbeddingLayer-—-指针共享"><a href="#二、GPUEmbeddingLayer-—-指针共享" class="headerlink" title="二、GPUEmbeddingLayer — 指针共享"></a>二、GPUEmbeddingLayer — 指针共享</h2><p><code>GPUEmbeddingLayer</code> 从 <code>config.embedding_table</code> 获取用户传入的指针，<strong>不拥有</strong>该内存的所有权：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">GPUTableConfig config<span class="token punctuation">;</span>
+config<span class="token punctuation">.</span>embedding_table <span class="token operator">=</span> shared_buffer<span class="token punctuation">;</span>  <span class="token comment">// 同一指针传入多个 layer</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<p>多个 <code>GPUEmbeddingLayer</code> 实例使用同一 <code>embedding_table</code> 指针即可共享数据。</p>
+<p><strong>更好的方式</strong>：使用同一 <code>GPUEmbeddingLayer</code> 的不同执行上下文（<code>ExecutionContext</code>），而不是多个层实例：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 单个层 + 多个上下文</span>
+<span class="token keyword">auto</span> layer <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>GPUEmbeddingLayer<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">>></span></span></span><span class="token punctuation">(</span>config<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">auto</span> ctx1 <span class="token operator">=</span> layer<span class="token operator">-></span><span class="token function">create_execution_context</span><span class="token punctuation">(</span>stream1<span class="token punctuation">,</span> <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">auto</span> ctx2 <span class="token operator">=</span> layer<span class="token operator">-></span><span class="token function">create_execution_context</span><span class="token punctuation">(</span>stream2<span class="token punctuation">,</span> <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 线程 1 使用 ctx1，线程 2 使用 ctx2</span>
+pool<span class="token operator">-></span><span class="token function">submit</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token operator">&amp;</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span> layer<span class="token operator">-></span><span class="token function">lookup</span><span class="token punctuation">(</span>ctx1<span class="token punctuation">,</span> <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+pool<span class="token operator">-></span><span class="token function">submit</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token operator">&amp;</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span> layer<span class="token operator">-></span><span class="token function">lookup</span><span class="token punctuation">(</span>ctx2<span class="token punctuation">,</span> <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>共享 GPU 嵌入表的注意事项：</p>
+<ul>
+<li>所有 GPU kernel 通过 <code>ScopedDevice</code> 切换到目标设备后才能访问指针</li>
+<li>如果指针指向的是另一个 GPU 的内存，需要 GPU 支持统一地址访问（NVLink 连接）</li>
+<li>写入时（<code>update()</code> &#x2F; <code>accumulate()</code>）需要应用层处理读后写冲突</li>
+</ul>
+<hr>
+<h2 id="三、LinearUVMEmbeddingLayer-—-UVM-表共享"><a href="#三、LinearUVMEmbeddingLayer-—-UVM-表共享" class="headerlink" title="三、LinearUVMEmbeddingLayer — UVM 表共享"></a>三、LinearUVMEmbeddingLayer — UVM 表共享</h2><p>这是最常用的多 GPU 共享方案。<code>LinearUVMEmbeddingLayer</code> 的 GPU cache 是私有的，但 UVM 后备表可以共享。</p>
+<h3 id="Host-内存共享（单节点）"><a href="#Host-内存共享（单节点）" class="headerlink" title="Host 内存共享（单节点）"></a>Host 内存共享（单节点）</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 1. 分配 UVM 后备表（首选 Host 位置）</span>
+<span class="token keyword">void</span><span class="token operator">*</span> linear_table <span class="token operator">=</span> <span class="token keyword">nullptr</span><span class="token punctuation">;</span>
+<span class="token function">cudaMallocManaged</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>linear_table<span class="token punctuation">,</span> linear_table_size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 2. 优化内存访问：建议所有 GPU 访问，首选位置为 CPU</span>
+<span class="token function">cudaMemAdvise</span><span class="token punctuation">(</span>linear_table<span class="token punctuation">,</span> linear_table_size<span class="token punctuation">,</span>
+              cudaMemAdviseSetAccessedBy<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// GPU 0</span>
+<span class="token function">cudaMemAdvise</span><span class="token punctuation">(</span>linear_table<span class="token punctuation">,</span> linear_table_size<span class="token punctuation">,</span>
+              cudaMemAdviseSetAccessedBy<span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// GPU 1</span>
+<span class="token function">cudaMemAdvise</span><span class="token punctuation">(</span>linear_table<span class="token punctuation">,</span> linear_table_size<span class="token punctuation">,</span>
+              cudaMemAdviseSetPreferredLocation<span class="token punctuation">,</span> cudaCpuDeviceId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 3. 为每块 GPU 创建 GpuTable（独立的 GPU cache）</span>
+GPUTableConfig cfg<span class="token punctuation">;</span>
+cfg<span class="token punctuation">.</span>device_id <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+cfg<span class="token punctuation">.</span>cache_size <span class="token operator">=</span> <span class="token number">1ULL</span> <span class="token operator">&lt;&lt;</span> <span class="token number">31</span><span class="token punctuation">;</span>      <span class="token comment">// 2GB cache per GPU</span>
+cfg<span class="token punctuation">.</span>uvm_table <span class="token operator">=</span> linear_table<span class="token punctuation">;</span>      <span class="token comment">// ← 共享指针</span>
+<span class="token keyword">auto</span> table0 <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>GpuTable<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">>></span></span></span><span class="token punctuation">(</span>cfg<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+cfg<span class="token punctuation">.</span>device_id <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token keyword">auto</span> table1 <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>GpuTable<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">>></span></span></span><span class="token punctuation">(</span>cfg<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 4. 创建独立的嵌入层</span>
+LinearUVMEmbeddingLayer<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">></span> <span class="token function">layer0</span><span class="token punctuation">(</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> table0<span class="token punctuation">)</span><span class="token punctuation">;</span>
+LinearUVMEmbeddingLayer<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">></span> <span class="token function">layer1</span><span class="token punctuation">(</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span> table1<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>原理</strong>：UVM 后备表分配在 Host 内存（<code>cudaMallocManaged</code> + <code>cudaMemAdviseSetPreferredLocation = cudaCpuDeviceId</code>），各 GPU 通过 UVM page fault 按需获取页面。每个 <code>GpuTable</code> 管理自己的 GPU cache，cache miss 时从同一块 Host 后备表读取。</p>
+<p><strong>更新冲突</strong>：当多个层同时写入 UVM 表时，通过 <code>disable_uvm_update</code> 控制——只允许一个 <code>GpuTable</code> 负责 UVM 写入，其余 GPU 仅读取：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">cfg0<span class="token punctuation">.</span>disable_uvm_update <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>  <span class="token comment">// GPU 0 负责写入</span>
+cfg1<span class="token punctuation">.</span>disable_uvm_update <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>   <span class="token comment">// GPU 1 只读</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<h3 id="Python-ManagedMemBlock"><a href="#Python-ManagedMemBlock" class="headerlink" title="Python ManagedMemBlock"></a>Python ManagedMemBlock</h3><pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">import</span> pynve<span class="token punctuation">.</span>nve <span class="token keyword">as</span> nve
+
+<span class="token comment"># 分配 Host 内存块</span>
+memblock <span class="token operator">=</span> nve<span class="token punctuation">.</span>ManagedMemBlock<span class="token punctuation">(</span>embedding_dim<span class="token punctuation">,</span> num_table_rows<span class="token punctuation">,</span> data_type<span class="token punctuation">)</span>
+
+<span class="token comment"># 多个 NVEmbedding 共享同一 memblock</span>
+emb0 <span class="token operator">=</span> nve<span class="token punctuation">.</span>NVEmbedding<span class="token punctuation">(</span>num_table_rows<span class="token punctuation">,</span> embedding_dim<span class="token punctuation">,</span> data_type<span class="token punctuation">,</span>
+    cache_type<span class="token operator">=</span>CacheType<span class="token punctuation">.</span>LinearUVM<span class="token punctuation">,</span> gpu_cache_size<span class="token operator">=</span>cache_size<span class="token punctuation">,</span>
+    memblock<span class="token operator">=</span>memblock<span class="token punctuation">,</span> device<span class="token operator">=</span>torch<span class="token punctuation">.</span>device<span class="token punctuation">(</span><span class="token string">"cuda:0"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+emb1 <span class="token operator">=</span> nve<span class="token punctuation">.</span>NVEmbedding<span class="token punctuation">(</span>num_table_rows<span class="token punctuation">,</span> embedding_dim<span class="token punctuation">,</span> data_type<span class="token punctuation">,</span>
+    cache_type<span class="token operator">=</span>CacheType<span class="token punctuation">.</span>LinearUVM<span class="token punctuation">,</span> gpu_cache_size<span class="token operator">=</span>cache_size<span class="token punctuation">,</span>
+    memblock<span class="token operator">=</span>memblock<span class="token punctuation">,</span> device<span class="token operator">=</span>torch<span class="token punctuation">.</span>device<span class="token punctuation">(</span><span class="token string">"cuda:1"</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>ManagedMemBlock</code> 内部调用 <code>cudaMallocManaged</code>，在 Python 端暴露为线性内存块。</p>
+<hr>
+<h2 id="四、CUDADistributedBuffer-—-CUDA-虚拟内存管理"><a href="#四、CUDADistributedBuffer-—-CUDA-虚拟内存管理" class="headerlink" title="四、CUDADistributedBuffer — CUDA 虚拟内存管理"></a>四、CUDADistributedBuffer — CUDA 虚拟内存管理</h2><h3 id="核心概念"><a href="#核心概念" class="headerlink" title="核心概念"></a>核心概念</h3><p><code>CUDADistributedBuffer</code>（<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/include/distributed.hpp"><code>include/distributed.hpp</code></a>）使用 <strong>CUDA Virtual Memory Management API</strong> 创建跨 GPU &#x2F; 跨节点的统一虚拟地址映射缓冲区。</p>
+<p><strong>与 UVM 的关键区别</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>UVM (cudaMallocManaged)</th>
+<th>CUDADistributedBuffer</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>物理分配</td>
+<td>GPU 自动管理</td>
+<td>每个 GPU 显式分配物理内存</td>
+</tr>
+<tr>
+<td>地址映射</td>
+<td>统一虚拟地址 + 硬件缺页</td>
+<td>虚拟地址 + 显式映射</td>
+</tr>
+<tr>
+<td>性能</td>
+<td>page fault 有额外开销</td>
+<td>直接物理内存访问，无缺页</td>
+</tr>
+<tr>
+<td>跨节点</td>
+<td>不支持</td>
+<td>支持（通过 Fabric 句柄）</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>单节点 Host 内存共享</td>
+<td>多节点 NVLink 分片</td>
+</tr>
+</tbody></table>
+<h3 id="构造函数流程"><a href="#构造函数流程" class="headerlink" title="构造函数流程"></a>构造函数流程</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token class-name">CUDADistributedBuffer</span><span class="token double-colon punctuation">::</span><span class="token function">CUDADistributedBuffer</span><span class="token punctuation">(</span>
+    <span class="token keyword">uint64_t</span> size<span class="token punctuation">,</span>
+    std<span class="token double-colon punctuation">::</span>shared_ptr<span class="token operator">&lt;</span>DistributedEnv<span class="token operator">></span> dist_env<span class="token punctuation">,</span>
+    BufferLocation location<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>single_host_<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">init_single_host</span><span class="token punctuation">(</span>size<span class="token punctuation">,</span> location<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">init_multi_host</span><span class="token punctuation">(</span>size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+    env_<span class="token operator">-></span><span class="token function">barrier</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 全部初始化完成后同步</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="单节点初始化（init-single-host）"><a href="#单节点初始化（init-single-host）" class="headerlink" title="单节点初始化（init_single_host）"></a>单节点初始化（init_single_host）</h3><pre class="line-numbers language-none"><code class="language-none">Rank 0 (root)
+  │
+  ├── collect_devices(): all_gather 收集各 rank 的设备 ID
+  │
+  ├── 计算 shard_size: 对齐到 num_shards × granularity
+  │
+  ├── 对每个有 GPU 的 rank:
+  │     cuMemCreate(&amp;handle, shard_size, ..., device_id)
+  │     cuMemExportToShareableHandle(&amp;fd, handle, POSIX_FILE_DESCRIPTOR)
+  │     all_alloc_handles_.push_back(handle)
+  │
+  ├── broadcast(shareable_fds, root&#x3D;0)
+  │   broadcast(root_pid, root&#x3D;0)
+  │
+  └── 非 root 进程:
+        pidfd_open(root_pid) → pidfd_getfd() → 获取本地 FD
+  │
+  └── 所有进程:
+        cuMemAddressReserve(&amp;buffer_, total_size_, ...)  &#x2F;&#x2F; 预留虚拟地址
+        cuMemImportFromShareableHandle(&amp;handle, fd, ...) &#x2F;&#x2F; 导入句柄
+        cuMemMap(buf_start, shard_size_, ..., handle, ...) &#x2F;&#x2F; 映射
+        cuMemRelease(handle)
+  │
+  └── cuMemSetAccess(buffer_, total_size_, access_descs, ...)
+        &#x2F;&#x2F; 设置所有 GPU 的读写权限<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="多节点初始化（init-multi-host）"><a href="#多节点初始化（init-multi-host）" class="headerlink" title="多节点初始化（init_multi_host）"></a>多节点初始化（init_multi_host）</h3><pre class="line-numbers language-none"><code class="language-none">每个节点（rank）
+  │
+  ├── check_imex(): 检查 &#x2F;dev&#x2F;nvidia-caps-imex-channels 是否存在
+  │                  IMEX &#x3D; Inter-Node Memory Extension
+  │
+  ├── cuMemCreate(&amp;handle, shard_size_, ..., device_id)
+  │   物理内存分配在本地 GPU
+  │
+  ├── cuMemExportToShareableHandle(&amp;fabric_handle, handle, FABRIC)
+  │   导出为 Fabric 句柄（跨节点共享）
+  │
+  ├── all_gather: 收集所有 rank 的 Fabric 句柄
+  │
+  ├── cuMemImportFromShareableHandle() → 导入各 rank 的句柄
+  │
+  ├── cuMemAddressReserve(&amp;buffer_, total_size_, ...)
+  │
+  ├── cuMemMap() → 将每个分片映射到虚拟地址的对应位置
+  │
+  └── cuMemSetAccess() → 设置本地 GPU 访问权限<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>IMEX 通道</strong> 是 NVIDIA 多节点 NVLink 系统的核心组件，为跨节点 GPU 间通信提供硬件路由能力。</p>
+<h3 id="析构函数"><a href="#析构函数" class="headerlink" title="析构函数"></a>析构函数</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token class-name">CUDADistributedBuffer</span><span class="token double-colon punctuation">::</span><span class="token operator">~</span><span class="token function">CUDADistributedBuffer</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    env_<span class="token operator">-></span><span class="token function">barrier</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>                 <span class="token comment">// 确保所有进程就绪</span>
+    <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">auto</span><span class="token operator">&amp;</span> h <span class="token operator">:</span> all_alloc_handles_<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">cuMemUnmap</span><span class="token punctuation">(</span>buf_start<span class="token punctuation">,</span> shard_size_<span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 取消映射</span>
+        <span class="token function">cuMemRelease</span><span class="token punctuation">(</span>h<span class="token punctuation">)</span><span class="token punctuation">;</span>                     <span class="token comment">// 释放物理分配</span>
+    <span class="token punctuation">&#125;</span>
+    env_<span class="token operator">-></span><span class="token function">barrier</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>                 <span class="token comment">// 确保所有进程取消映射完毕</span>
+    <span class="token function">cuMemAddressFree</span><span class="token punctuation">(</span>buffer_<span class="token punctuation">,</span> total_size_<span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 释放虚拟地址空间</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="五、MPI-分布式环境"><a href="#五、MPI-分布式环境" class="headerlink" title="五、MPI 分布式环境"></a>五、MPI 分布式环境</h2><h3 id="DistributedEnv-接口"><a href="#DistributedEnv-接口" class="headerlink" title="DistributedEnv 接口"></a>DistributedEnv 接口</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">DistributedEnv</span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token keyword">virtual</span> size_t <span class="token function">rank</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> size_t <span class="token function">world_size</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> size_t <span class="token function">device_count</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> <span class="token keyword">int</span> <span class="token function">local_device</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> <span class="token keyword">bool</span> <span class="token function">single_host</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">barrier</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">broadcast</span><span class="token punctuation">(</span>uintptr_t buf<span class="token punctuation">,</span> size_t size<span class="token punctuation">,</span> <span class="token keyword">int</span> root<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">all_gather</span><span class="token punctuation">(</span>uintptr_t send<span class="token punctuation">,</span> uintptr_t recv<span class="token punctuation">,</span> size_t size<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>local_device()</code> 是关键方法：它确定当前进程应该使用哪块 GPU。对于单节点多进程场景，通常 <code>local_device = rank % device_count()</code>。</p>
+<h3 id="collect-devices"><a href="#collect-devices" class="headerlink" title="collect_devices()"></a>collect_devices()</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">uint64_t</span> <span class="token class-name">CUDADistributedBuffer</span><span class="token double-colon punctuation">::</span><span class="token function">collect_devices</span><span class="token punctuation">(</span>std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span><span class="token keyword">int</span><span class="token operator">></span><span class="token operator">&amp;</span> all_devices<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">int</span> local_device <span class="token operator">=</span> env_<span class="token operator">-></span><span class="token function">local_device</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">const</span> <span class="token keyword">auto</span> world_size <span class="token operator">=</span> env_<span class="token operator">-></span><span class="token function">world_size</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    all_devices<span class="token punctuation">.</span><span class="token function">resize</span><span class="token punctuation">(</span>world_size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    env_<span class="token operator">-></span><span class="token function">all_gather</span><span class="token punctuation">(</span><span class="token generic-function"><span class="token function">reinterpret_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>uintptr_t<span class="token operator">></span></span></span><span class="token punctuation">(</span><span class="token operator">&amp;</span>local_device<span class="token punctuation">)</span><span class="token punctuation">,</span>
+                     <span class="token generic-function"><span class="token function">reinterpret_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>uintptr_t<span class="token operator">></span></span></span><span class="token punctuation">(</span><span class="token operator">&amp;</span>all_devices<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+                     <span class="token keyword">sizeof</span><span class="token punctuation">(</span>local_device<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">uint64_t</span> num_devices <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">auto</span><span class="token operator">&amp;</span> d <span class="token operator">:</span> all_devices<span class="token punctuation">)</span> <span class="token keyword">if</span> <span class="token punctuation">(</span>d <span class="token operator">>=</span> <span class="token number">0</span><span class="token punctuation">)</span> num_devices<span class="token operator">++</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> num_devices<span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="六、Python-端的-MemBlock-系列"><a href="#六、Python-端的-MemBlock-系列" class="headerlink" title="六、Python 端的 MemBlock 系列"></a>六、Python 端的 MemBlock 系列</h2><h3 id="类层次"><a href="#类层次" class="headerlink" title="类层次"></a>类层次</h3><pre class="line-numbers language-none"><code class="language-none">MemBlock (抽象基类, C++ binding)
+  ├── LinearMemBlock     — cudaMallocHost 分配的 Host 固定内存
+  ├── ManagedMemBlock    — cudaMallocManaged 分配的 UVM 内存
+  ├── NVLMemBlock        — 单节点多 GPU NVLink 共享内存
+  ├── MPIMemBlock        — 多节点 MPI 分布式共享内存
+  └── DistMemBlock       — 分布式环境共享内存（别名，同 MPIMemBlock）<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="MPIMemBlock（Python）"><a href="#MPIMemBlock（Python）" class="headerlink" title="MPIMemBlock（Python）"></a>MPIMemBlock（Python）</h3><pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">import</span> pynve<span class="token punctuation">.</span>nve <span class="token keyword">as</span> nve
+<span class="token keyword">from</span> mpi4py <span class="token keyword">import</span> MPI
+
+comm <span class="token operator">=</span> MPI<span class="token punctuation">.</span>COMM_WORLD
+mpi_rank <span class="token operator">=</span> comm<span class="token punctuation">.</span>Get_rank<span class="token punctuation">(</span><span class="token punctuation">)</span>
+local_device_id <span class="token operator">=</span> mpi_rank <span class="token operator">%</span> torch<span class="token punctuation">.</span>cuda<span class="token punctuation">.</span>device_count<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 分配跨节点共享的分布式内存块</span>
+memblock <span class="token operator">=</span> nve<span class="token punctuation">.</span>MPIMemBlock<span class="token punctuation">(</span>embedding_dim<span class="token punctuation">,</span> num_table_rows<span class="token punctuation">,</span> data_type<span class="token punctuation">)</span>
+
+<span class="token comment"># 创建嵌入层（每个进程独立 GPU cache，共享后备表）</span>
+emb_layer <span class="token operator">=</span> nve_layers<span class="token punctuation">.</span>NVEmbedding<span class="token punctuation">(</span>
+    num_table_rows<span class="token punctuation">,</span> embedding_dim<span class="token punctuation">,</span> data_type<span class="token punctuation">,</span>
+    cache_type<span class="token operator">=</span>CacheType<span class="token punctuation">.</span>LinearUVM<span class="token punctuation">,</span>
+    gpu_cache_size<span class="token operator">=</span>cache_size<span class="token punctuation">,</span>
+    memblock<span class="token operator">=</span>memblock<span class="token punctuation">,</span>
+    device<span class="token operator">=</span>torch<span class="token punctuation">.</span>device<span class="token punctuation">(</span><span class="token string-interpolation"><span class="token string">f"cuda:</span><span class="token interpolation"><span class="token punctuation">&#123;</span>local_device_id<span class="token punctuation">&#125;</span></span><span class="token string">"</span></span><span class="token punctuation">)</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>MPIMemBlock</code> 内部绑定到 <code>CUDADistributedBuffer</code>，通过 MPI 通信交换 GPU 物理内存句柄。</p>
+<h3 id="NVLMemBlock（Python）"><a href="#NVLMemBlock（Python）" class="headerlink" title="NVLMemBlock（Python）"></a>NVLMemBlock（Python）</h3><p>单节点多 GPU 场景下的 NVLink 共享内存：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token comment"># 在 GPU 0,1,2 上分配物理内存分片</span>
+memblock <span class="token operator">=</span> nve<span class="token punctuation">.</span>NVLMemBlock<span class="token punctuation">(</span>embedding_dim<span class="token punctuation">,</span> num_table_rows<span class="token punctuation">,</span>
+                           data_type<span class="token punctuation">,</span> gpu_ids<span class="token operator">=</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p><code>NVLMemBlock</code> 内部在指定的每块 GPU 上分配物理内存，通过 <code>cuMemCreate</code> &#x2F; <code>cuMemExportToShareableHandle</code> &#x2F; <code>cuMemImportFromShareableHandle</code> 将各分片映射到统一虚拟地址空间（与 <code>init_single_host</code> 逻辑相同）。</p>
+<h3 id="两种-NoCache-路径"><a href="#两种-NoCache-路径" class="headerlink" title="两种 NoCache 路径"></a>两种 NoCache 路径</h3><p>对于 <code>CacheType.NoCache</code>，Python 端使用 <code>LinearMemBlock</code>（Host 固定内存）或 <code>ManagedMemBlock</code>（UVM 内存），嵌入向量直接存储在其中，没有 GPU cache 层。查找时通过 cuEmbed kernel 直接读取。</p>
+<hr>
+<h2 id="七、数据竞争与读写安全"><a href="#七、数据竞争与读写安全" class="headerlink" title="七、数据竞争与读写安全"></a>七、数据竞争与读写安全</h2><h3 id="只读场景"><a href="#只读场景" class="headerlink" title="只读场景"></a>只读场景</h3><p>当嵌入表只读时（推理场景），不需要额外同步。每个 <code>GpuTable</code> 独立管理自己的 GPU cache，从共享后备表读取数据。cache 行通过 UVM 或 NVLink 读取。</p>
+<h3 id="写入场景"><a href="#写入场景" class="headerlink" title="写入场景"></a>写入场景</h3><p>当共享资源被修改时，其他 layer 必须被阻塞直到修改完成：</p>
+<pre class="line-numbers language-none"><code class="language-none">Layer 0 (GPU 0)          Layer 1 (GPU 1)
+    │                        │
+    ├ update(keys, values)   │
+    │   ↓                    │
+    │ UpdateTable kernel     │
+    │ (写入 UVM 后备表)       │
+    │   ↓                    │
+    │ cudaEventRecord        │
+    │   ↓                    │
+    │ cudaStreamSynchronize  │
+    │                        ├ lookup(keys) → (等待完成)
+    │                        │   ↓
+    │                        │ GpuTable::find()
+    │                        │ (读取 UVM 后备表)
+
+同步方式:
+  C++: cudaEvent + cudaStreamWaitEvent (GPU 级异步)
+  Python: torch.cuda.synchronize() &#x2F; MPI barrier()<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="Cache-一致性问题"><a href="#Cache-一致性问题" class="headerlink" title="Cache 一致性问题"></a>Cache 一致性问题</h3><p>如果<strong>直接修改</strong>共享后备表（绕过 <code>layer-&gt;update()</code>），GPU cache 中可能还持有旧值：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 方案 1: 调用 update() 更新缓存和后备表</span>
+layer<span class="token operator">-></span><span class="token function">update</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> num_keys<span class="token punctuation">,</span> keys<span class="token punctuation">,</span> stride<span class="token punctuation">,</span> size<span class="token punctuation">,</span> new_values<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 方案 2: 调用 erase() 淘汰缓存条目（下次 lookup 时自动从后备表加载）</span>
+layer<span class="token operator">-></span><span class="token function">erase</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> num_keys<span class="token punctuation">,</span> keys<span class="token punctuation">,</span> table_id<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="八、性能特征对比"><a href="#八、性能特征对比" class="headerlink" title="八、性能特征对比"></a>八、性能特征对比</h2><h3 id="方案总结"><a href="#方案总结" class="headerlink" title="方案总结"></a>方案总结</h3><table>
+<thead>
+<tr>
+<th>方案</th>
+<th>C++ 实现</th>
+<th>Python 实现</th>
+<th>跨节点</th>
+<th>性能特征</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Host 内存共享</td>
+<td><code>cudaMallocHost</code> + 多 <code>GpuTable</code></td>
+<td><code>ManagedMemBlock</code></td>
+<td>❌</td>
+<td>延迟高（UVM page fault）</td>
+</tr>
+<tr>
+<td>UVM 共享</td>
+<td><code>cudaMallocManaged</code> + <code>cudaMemAdvise</code></td>
+<td><code>ManagedMemBlock</code></td>
+<td>❌</td>
+<td>延迟中等（UVM 自动迁移）</td>
+</tr>
+<tr>
+<td>NVLink 分片</td>
+<td><code>CUDADistributedBuffer</code> (single_host)</td>
+<td><code>NVLMemBlock</code></td>
+<td>❌</td>
+<td>延迟低（硬件直连）</td>
+</tr>
+<tr>
+<td>多节点分片</td>
+<td><code>CUDADistributedBuffer</code> (multi_host)</td>
+<td><code>MPIMemBlock</code></td>
+<td>✅</td>
+<td>延迟由 NVLink Fabric 决定</td>
+</tr>
+</tbody></table>
+<h3 id="多-GPU-基准测试"><a href="#多-GPU-基准测试" class="headerlink" title="多 GPU 基准测试"></a>多 GPU 基准测试</h3><p>项目在 <code>benchmarks/multi_gpu_bench.py</code> 中提供了完整的分布式基准测试框架，使用 <code>torch.distributed</code> + <code>mpi4py</code> 启动多进程训练&#x2F;推理：</p>
+<pre class="line-numbers language-bash" data-language="bash"><code class="language-bash"><span class="token comment"># 单节点 4 GPU</span>
+mpirun <span class="token parameter variable">-n</span> <span class="token number">4</span> python benchmarks/multi_gpu_bench.py <span class="token punctuation">\</span>
+    <span class="token parameter variable">--memblock</span> managed
+
+<span class="token comment"># 跨节点（需要 IMEX 通道）</span>
+mpirun <span class="token parameter variable">-n</span> <span class="token number">8</span> <span class="token parameter variable">--host</span> node1:4,node2:4 <span class="token punctuation">\</span>
+    python benchmarks/multi_gpu_bench.py <span class="token punctuation">\</span>
+    <span class="token parameter variable">--memblock</span> mpi<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="九、术语表（GLOSSARY）"><a href="#九、术语表（GLOSSARY）" class="headerlink" title="九、术语表（GLOSSARY）"></a>九、术语表（GLOSSARY）</h2><table>
+<thead>
+<tr>
+<th>术语</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>UVM</strong></td>
+<td>CUDA Unified Virtual Memory。统一虚拟地址空间，可同时映射到 GPU 和 Host 物理内存。</td>
+</tr>
+<tr>
+<td><strong>NVLink</strong></td>
+<td>NVIDIA 的高带宽 GPU 直连技术，支持多 GPU 间低延迟通信。</td>
+</tr>
+<tr>
+<td><strong>NVSwitch</strong></td>
+<td>NVLink 交换机，允许多 GPU 全互联。</td>
+</tr>
+<tr>
+<td><strong>IMEX</strong></td>
+<td>Inter-Node Memory Extension。跨节点 NVLink 通道，使多节点 GPU 能够直接访问对方物理内存。</td>
+</tr>
+<tr>
+<td><strong>Fabric Handle</strong></td>
+<td>CUDA 虚拟内存管理的跨节点共享句柄类型（<code>CU_MEM_HANDLE_TYPE_FABRIC</code>）。</td>
+</tr>
+<tr>
+<td><strong>DDP</strong></td>
+<td>Distributed Data Parallel。数据并行训练策略，每个 GPU 持有完整模型副本但处理不同数据分片。</td>
+</tr>
+<tr>
+<td><strong>Sharding</strong></td>
+<td>将嵌入表按行分割到多个 GPU&#x2F;节点，每个 GPU 只持有部分物理内存。</td>
+</tr>
+<tr>
+<td><strong>page fault</strong></td>
+<td>当 GPU 访问尚未映射到本地显存的 UVM 页面时触发的缺页中断。</td>
+</tr>
+<tr>
+<td><strong>pidfd</strong></td>
+<td>Linux 进程文件描述符（<code>pidfd_open</code> + <code>pidfd_getfd</code>），允许跨进程共享文件句柄。</td>
+</tr>
+</tbody></table>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/NVIDIA/" rel="tag"># NVIDIA</a>
+              <a href="/tags/Embedding/" rel="tag"># Embedding</a>
+              <a href="/tags/CUDA/" rel="tag"># CUDA</a>
+              <a href="/tags/NVEmbeddingCache/" rel="tag"># NVEmbeddingCache</a>
+              <a href="/tags/UVM/" rel="tag"># UVM</a>
+              <a href="/tags/Multi-GPU/" rel="tag"># Multi-GPU</a>
+              <a href="/tags/Distributed/" rel="tag"># Distributed</a>
+              <a href="/tags/NVLink/" rel="tag"># NVLink</a>
+              <a href="/tags/MPI/" rel="tag"># MPI</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/b4c73ab2.html" rel="prev" title="advanced-usage">
+                  <i class="fa fa-angle-left"></i> advanced-usage
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/efd455f3.html" rel="next" title="professor-team-knowledge-base">
+                  professor-team-knowledge-base <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

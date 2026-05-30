@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="深入解析 planning-with-files 如何通过三文件模式（task_plan &#x2F; findings &#x2F; progress）将 AI Agent 的上下文窗口从挥发性内存扩展为持久化磁盘存储，实现目标不漂移、错误可追溯的工程化工作流。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Planning with Files —— AI Agent 的持久化工作记忆">
+<meta property="og:url" content="https://phantom9999.github.io/posts/8d3dcd9.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="深入解析 planning-with-files 如何通过三文件模式（task_plan &#x2F; findings &#x2F; progress）将 AI Agent 的上下文窗口从挥发性内存扩展为持久化磁盘存储，实现目标不漂移、错误可追溯的工程化工作流。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-27T23:53:52.000Z">
+<meta property="article:modified_time" content="2026-05-27T23:53:52.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="AI">
+<meta property="article:tag" content="Agent">
+<meta property="article:tag" content="Claude-Code">
+<meta property="article:tag" content="Context-Engineering">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/8d3dcd9.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/8d3dcd9.html","path":"posts/8d3dcd9.html","title":"Planning with Files —— AI Agent 的持久化工作记忆"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Planning with Files —— AI Agent 的持久化工作记忆 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E9%97%AE%E9%A2%98%EF%BC%9AAI-Agent-%E7%9A%84%E8%AE%B0%E5%BF%86%E5%9B%B0%E5%A2%83"><span class="nav-number">2.</span> <span class="nav-text">问题：AI Agent 的记忆困境</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%96%B9%E6%A1%88%EF%BC%9A%E4%B8%89%E6%96%87%E4%BB%B6%E6%A8%A1%E5%BC%8F"><span class="nav-number">3.</span> <span class="nav-text">方案：三文件模式</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#task-plan-md-%E2%80%94%E2%80%94-%E4%BB%BB%E5%8A%A1%E8%A7%84%E5%88%92"><span class="nav-number">3.1.</span> <span class="nav-text">task_plan.md —— 任务规划</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#findings-md-%E2%80%94%E2%80%94-%E7%A0%94%E7%A9%B6%E5%8F%91%E7%8E%B0"><span class="nav-number">3.2.</span> <span class="nav-text">findings.md —— 研究发现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#progress-md-%E2%80%94%E2%80%94-%E8%BF%9B%E5%BA%A6%E6%97%A5%E5%BF%97"><span class="nav-number">3.3.</span> <span class="nav-text">progress.md —— 进度日志</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%BA%94%E5%A4%A7%E6%A0%B8%E5%BF%83%E8%A7%84%E5%88%99"><span class="nav-number">4.</span> <span class="nav-text">五大核心规则</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Hook-%E6%9C%BA%E5%88%B6%EF%BC%9A%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%93%8D%E6%8E%A7"><span class="nav-number">5.</span> <span class="nav-text">Hook 机制：注意力操控</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%B9%B6%E8%A1%8C%E8%AE%A1%E5%88%92%E4%B8%8E%E7%9B%AE%E5%BD%95%E9%9A%94%E7%A6%BB"><span class="nav-number">6.</span> <span class="nav-text">并行计划与目录隔离</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%BA%94%E9%97%AE%E9%87%8D%E5%90%AF%E6%B5%8B%E8%AF%95"><span class="nav-number">7.</span> <span class="nav-text">五问重启测试</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%9F%BA%E5%87%86%E6%B5%8B%E8%AF%95"><span class="nav-number">8.</span> <span class="nav-text">基准测试</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%A4%9A%E5%B9%B3%E5%8F%B0%E6%94%AF%E6%8C%81"><span class="nav-number">9.</span> <span class="nav-text">多平台支持</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E9%80%82%E7%94%A8%E5%9C%BA%E6%99%AF"><span class="nav-number">10.</span> <span class="nav-text">适用场景</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%AE%89%E8%A3%85%E4%B8%8E%E4%BD%BF%E7%94%A8"><span class="nav-number">11.</span> <span class="nav-text">安装与使用</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/8d3dcd9.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Planning with Files —— AI Agent 的持久化工作记忆 | phantom9999的博客">
+      <meta itemprop="description" content="深入解析 planning-with-files 如何通过三文件模式（task_plan &#x2F; findings &#x2F; progress）将 AI Agent 的上下文窗口从挥发性内存扩展为持久化磁盘存储，实现目标不漂移、错误可追溯的工程化工作流。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Planning with Files —— AI Agent 的持久化工作记忆
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2026-05-27 23:53:52" itemprop="dateCreated datePublished" datetime="2026-05-27T23:53:52+00:00">2026-05-27</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/ai/" itemprop="url" rel="index"><span itemprop="name">ai</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">深入解析 planning-with-files 如何通过三文件模式（task_plan / findings / progress）将 AI Agent 的上下文窗口从挥发性内存扩展为持久化磁盘存储，实现目标不漂移、错误可追溯的工程化工作流。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>2025 年 12 月，Meta 以 20 亿美元收购了 AI Agent 公司 Manus。这家成立仅 8 个月的公司，年收入已突破 1 亿美元。Manus 成功的秘诀是什么？<strong>上下文工程（Context Engineering）</strong>。</p>
+<p>Manus 官方博客中有一段话：</p>
+<blockquote>
+<p>“Markdown 是我在磁盘上的’工作记忆’。由于我以迭代方式处理信息，且活跃上下文有限，Markdown 文件充当了便签、检查点和最终交付物的构建块。”</p>
+</blockquote>
+<p>这正是 <code>planning-with-files</code> 技能的核心思想。</p>
+<h1 id="问题：AI-Agent-的记忆困境"><a href="#问题：AI-Agent-的记忆困境" class="headerlink" title="问题：AI Agent 的记忆困境"></a>问题：AI Agent 的记忆困境</h1><p>当前主流的 AI 编程 Agent（Claude Code、Cursor、Copilot 等）普遍面临以下问题：</p>
+<p><strong>挥发性记忆。</strong> Agent 的 TodoWrite 等工具将任务列表保存在上下文窗口中，一旦执行 <code>/clear</code> 或上下文压缩，所有规划信息就消失了。</p>
+<p><strong>目标漂移。</strong> 经过 50 次以上的工具调用后，Agent 往往会忘记最初的目标。它开始偏离主干，在无关细节上钻牛角尖。</p>
+<p><strong>错误不可追溯。</strong> 错误被即时处理但未被记录。当 Agent 再次遭遇同样的失败时，它会重复相同的错误尝试。</p>
+<p><strong>上下文膨胀。</strong> 所有中间结果都被塞进上下文窗口，而不是写入持久化存储。上下文窗口很快被填满，后续推理质量下降。</p>
+<h1 id="方案：三文件模式"><a href="#方案：三文件模式" class="headerlink" title="方案：三文件模式"></a>方案：三文件模式</h1><p><code>planning-with-files</code> 定义了一个简单的三文件工作模式：</p>
+<pre class="line-numbers language-none"><code class="language-none">task_plan.md    → 追踪阶段与进度
+findings.md     → 存储研究与发现
+progress.md     → 记录会话日志与测试结果<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>核心原则只有一条：</p>
+<pre class="line-numbers language-none"><code class="language-none">上下文窗口 &#x3D; 内存（易失、有限）
+文件系统     &#x3D; 磁盘（持久、无限）
+
+→ 重要的东西写进磁盘。<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="task-plan-md-——-任务规划"><a href="#task-plan-md-——-任务规划" class="headerlink" title="task_plan.md —— 任务规划"></a>task_plan.md —— 任务规划</h2><p>这是整个工作的「方向盘」，包含：</p>
+<ul>
+<li><strong>Goal</strong>：任务目标</li>
+<li><strong>Phases</strong>：拆分为 3-7 个阶段，每阶段带 <code>[ ]</code> 复选框和 <code>**Status:** pending/in_progress/complete</code></li>
+<li><strong>Decisions</strong>：重大技术决策及理由</li>
+<li><strong>Errors</strong>：记录所有错误及解决方案</li>
+</ul>
+<h2 id="findings-md-——-研究发现"><a href="#findings-md-——-研究发现" class="headerlink" title="findings.md —— 研究发现"></a>findings.md —— 研究发现</h2><p>这是「知识库」，存放：</p>
+<ul>
+<li>搜索结果、文档链接</li>
+<li>技术调研的发现</li>
+<li>决策的理由和权衡</li>
+</ul>
+<h2 id="progress-md-——-进度日志"><a href="#progress-md-——-进度日志" class="headerlink" title="progress.md —— 进度日志"></a>progress.md —— 进度日志</h2><p>这是「工作日志」，按时间线记录：</p>
+<ul>
+<li>每个阶段开始&#x2F;结束时间</li>
+<li>执行的操作、修改的文件</li>
+<li>测试结果</li>
+<li>错误日志（带时间戳）</li>
+</ul>
+<h1 id="五大核心规则"><a href="#五大核心规则" class="headerlink" title="五大核心规则"></a>五大核心规则</h1><table>
+<thead>
+<tr>
+<th>规则</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>先建计划</strong></td>
+<td>永远不要在创建 <code>task_plan.md</code> 之前开始工作</td>
+</tr>
+<tr>
+<td><strong>2 操作规则</strong></td>
+<td>每执行 2 次浏览&#x2F;搜索操作后，必须更新 <code>findings.md</code></td>
+</tr>
+<tr>
+<td><strong>记录所有错误</strong></td>
+<td>即使立即解决的错误也要记录，避免重复踩坑</td>
+</tr>
+<tr>
+<td><strong>不重复失败</strong></td>
+<td>记录每次尝试，失败后必须换方案</td>
+</tr>
+<tr>
+<td><strong>持续完成验证</strong></td>
+<td>Stop Hook 自动检查所有阶段是否标记为 complete</td>
+</tr>
+</tbody></table>
+<h1 id="Hook-机制：注意力操控"><a href="#Hook-机制：注意力操控" class="headerlink" title="Hook 机制：注意力操控"></a>Hook 机制：注意力操控</h1><p><code>planning-with-files</code> 真正的工程创新在于 Hook 系统。它通过 Claude Code 的生命周期钩子，在关键时刻自动介入：</p>
+<table>
+<thead>
+<tr>
+<th>Hook</th>
+<th>触发时机</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>SessionStart</strong></td>
+<td>会话开始时</td>
+<td>自动恢复上次会话状态，注入 catchup 报告</td>
+</tr>
+<tr>
+<td><strong>PreToolUse</strong></td>
+<td>Write&#x2F;Edit&#x2F;Bash 操作前</td>
+<td>重新读取 <code>task_plan.md</code>，将目标刷新到注意力窗口</td>
+</tr>
+<tr>
+<td><strong>PostToolUse</strong></td>
+<td>Write&#x2F;Edit 操作后</td>
+<td>提醒更新阶段状态</td>
+</tr>
+<tr>
+<td><strong>Stop</strong></td>
+<td>Agent 尝试停止时</td>
+<td>检查所有阶段是否完成，未完成则阻止退出</td>
+</tr>
+<tr>
+<td><strong>PreCompact</strong></td>
+<td>上下文压缩前</td>
+<td>提醒刷新进度日志，防止信息丢失</td>
+</tr>
+</tbody></table>
+<p>PreToolUse Hook 是整套机制的关键——它在<strong>每次工具调用前</strong>将计划重新注入 Agent 的注意力窗口，从根本上解决了目标漂移问题。</p>
+<p>但这也带来了独特的安全风险。2025 年的安全审计揭示了一条危险的攻击链：</p>
+<pre class="line-numbers language-none"><code class="language-none">WebSearch(恶意站点) → 内容写入 task_plan.md
+→ Hook 在下一次工具调用前读取 task_plan.md
+→ Hook 在下下次工具调用前再次读取
+→ 恶意指令被无限放大<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>v2.21.0 版本修复了这一问题：从技能声明中移除 <code>WebFetch</code> &#x2F; <code>WebSearch</code>，并添加了安全边界规则——<strong>网页搜索结果只能写入 <code>findings.md</code>，绝不能写入 <code>task_plan.md</code></strong>。</p>
+<h1 id="并行计划与目录隔离"><a href="#并行计划与目录隔离" class="headerlink" title="并行计划与目录隔离"></a>并行计划与目录隔离</h1><p>v2.36.0 引入了并行计划支持，允许同一仓库中存在多个独立的计划目录：</p>
+<pre class="line-numbers language-text" data-language="text"><code class="language-text">.planning/
+  2026-01-10-backend-refactor/
+    task_plan.md / findings.md / progress.md
+  2026-01-10-production-incident/
+    task_plan.md / findings.md / progress.md<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>使用 <code>init-session.sh &lt;slug&gt;</code> 创建独立计划，使用 <code>set-active-plan.sh &lt;plan-id&gt;</code> 切换活跃计划。Hook 会自动解析当前活跃的计划目录。</p>
+<p>此外，对于跨多个会话的长期运营主题，还提供了 Topic Handoff 模式：</p>
+<pre class="line-numbers language-text" data-language="text"><code class="language-text">progress.md                 ← 运行时间线和简短索引
+handoffs/&lt;topic>.md         ← 当前状态、命令、验证、风险、回滚方案<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<h1 id="五问重启测试"><a href="#五问重启测试" class="headerlink" title="五问重启测试"></a>五问重启测试</h1><p>判断上下文管理是否扎实，只需回答五个问题：</p>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>答案来源</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>我在哪？</td>
+<td><code>task_plan.md</code> 中的当前阶段</td>
+</tr>
+<tr>
+<td>我去哪？</td>
+<td><code>task_plan.md</code> 中的剩余阶段</td>
+</tr>
+<tr>
+<td>目标是什么？</td>
+<td><code>task_plan.md</code> 中的 Goal 声明</td>
+</tr>
+<tr>
+<td>我学到了什么？</td>
+<td><code>findings.md</code></td>
+</tr>
+<tr>
+<td>我做了什么？</td>
+<td><code>progress.md</code></td>
+</tr>
+</tbody></table>
+<h1 id="基准测试"><a href="#基准测试" class="headerlink" title="基准测试"></a>基准测试</h1><p>使用 Anthropic 的 skill-creator 框架进行的正式评估（10 个并行子 Agent，5 类任务，30 项断言，3 次盲测）：</p>
+<table>
+<thead>
+<tr>
+<th>测试配置</th>
+<th>通过率</th>
+<th>通过数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>启用 skill</td>
+<td><strong>96.7%</strong></td>
+<td>29&#x2F;30</td>
+</tr>
+<tr>
+<td>未启用 skill</td>
+<td>6.7%</td>
+<td>2&#x2F;30</td>
+</tr>
+<tr>
+<td>差值</td>
+<td><strong>+90 个百分点</strong></td>
+<td>+27&#x2F;30</td>
+</tr>
+</tbody></table>
+<p>盲测 A&#x2F;B 对比：启用 skill 的 Agent 在所有 3 次对比中均获胜（评分 10.0 vs 6.0 &#x2F; 10.0 vs 6.3 &#x2F; 10.0 vs 8.0）。</p>
+<p>未启用 skill 的 Agent 并非产出低劣——它们生成了可运行的代码、合理的研究对比、详细的迁移计划。但<strong>没有任何一个</strong>遵循了结构化的规划流程。而这正是 skill 的全部价值所在。</p>
+<h1 id="多平台支持"><a href="#多平台支持" class="headerlink" title="多平台支持"></a>多平台支持</h1><p><code>planning-with-files</code> 目前已支持 17+ 个平台和 IDE，包括 Claude Code、Cursor、GitHub Copilot、Gemini CLI、Codex、Kiro、CodeBuddy、FactoryAI、OpenCode、Continue、Pi Agent、OpenClaw、Antigravity、Kilocode、AdaL CLI、Mastra Code、Hermes 等。同时提供阿拉伯语、德语、西班牙语、简体中文和繁体中文版本。</p>
+<h1 id="适用场景"><a href="#适用场景" class="headerlink" title="适用场景"></a>适用场景</h1><p><strong>适合使用：</strong></p>
+<ul>
+<li>需要 3 步以上的多阶段任务</li>
+<li>调研类任务</li>
+<li>构建 &#x2F; 创建项目</li>
+<li>涉及大量工具调用的任务</li>
+</ul>
+<p><strong>不需要使用：</strong></p>
+<ul>
+<li>简单问答</li>
+<li>单文件修改</li>
+<li>快速查找</li>
+</ul>
+<h1 id="安装与使用"><a href="#安装与使用" class="headerlink" title="安装与使用"></a>安装与使用</h1><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">npx skills <span class="token function">add</span> OthmanAdi/planning-with-files <span class="token parameter variable">--skill</span> planning-with-files <span class="token parameter variable">-g</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>安装后使用 <code>/plan</code> 或 <code>/planning-with-files:plan</code> 启动计划会话。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p><code>planning-with-files</code> 本质上是一套<strong>编码化的工程纪律</strong>。Claude 本身能够做规划，这个 skill 并不赋予它新的能力——而是将一套经过验证的结构化工作流编码为可复用的模式。</p>
+<p>它巧妙地将「上下文窗口是稀缺资源」这一约束转化为了工程优势：通过文件系统建立持久化工作记忆，通过 Hook 系统实现注意力操控，通过阶段状态追踪确保任务闭环。</p>
+<p>Manus 用这套方法在 8 个月内从零做到 20 亿美元估值。而 <code>planning-with-files</code> 将同样的模式以开源、跨平台的方式带给了每一位 AI Agent 用户。</p>
+<blockquote>
+<p>项目地址：<span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL090aG1hbkFkaS9wbGFubmluZy13aXRoLWZpbGVz">github.com&#x2F;OthmanAdi&#x2F;planning-with-files<i class="fa fa-external-link-alt"></i></span></p>
+</blockquote>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/AI/" rel="tag"># AI</a>
+              <a href="/tags/Agent/" rel="tag"># Agent</a>
+              <a href="/tags/Context-Engineering/" rel="tag"># Context-Engineering</a>
+              <a href="/tags/Claude-Code/" rel="tag"># Claude-Code</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/ebd7c5c3.html" rel="prev" title="Claude Mem 深度调研：为 AI 编程助手装上持久化记忆">
+                  <i class="fa fa-angle-left"></i> Claude Mem 深度调研：为 AI 编程助手装上持久化记忆
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/af2e1963.html" rel="next" title="nv-embedding-cache">
+                  nv-embedding-cache <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

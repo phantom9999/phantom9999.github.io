@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="简介本文将介绍一下tensorflow的saved model数据的结构。 模型文件">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tensorflow模型数据解析">
+<meta property="og:url" content="https://phantom9999.github.io/posts/e1fa92aa.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="简介本文将介绍一下tensorflow的saved model数据的结构。 模型文件">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://phantom9999.github.io/images/tf_netron.png">
+<meta property="og:image" content="https://phantom9999.github.io/images/saved_model_file.png">
+<meta property="article:published_time" content="2022-06-14T22:46:25.000Z">
+<meta property="article:modified_time" content="2022-06-14T22:46:25.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="saved model">
+<meta property="article:tag" content="tensorflow">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://phantom9999.github.io/images/tf_netron.png">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/e1fa92aa.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/e1fa92aa.html","path":"posts/e1fa92aa.html","title":"tensorflow模型数据解析"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>tensorflow模型数据解析 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E6%96%87%E4%BB%B6"><span class="nav-number">2.</span> <span class="nav-text">模型文件</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E5%8A%A0%E8%BD%BD%E6%B5%81%E7%A8%8B"><span class="nav-number">3.</span> <span class="nav-text">模型加载流程</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84"><span class="nav-number">4.</span> <span class="nav-text">模型数据结构</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/e1fa92aa.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="tensorflow模型数据解析 | phantom9999的博客">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          tensorflow模型数据解析
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-06-14 22:46:25" itemprop="dateCreated datePublished" datetime="2022-06-14T22:46:25+00:00">2022-06-14</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/inference/" itemprop="url" rel="index"><span itemprop="name">inference</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>本文将介绍一下tensorflow的saved model数据的结构。</p>
+<h1 id="模型文件"><a href="#模型文件" class="headerlink" title="模型文件"></a>模型文件</h1><p>tensorflow的saved model的目录结构如下:</p>
+<ul>
+<li>saved_model.pb 模型描述文件，pb二进制; 也可以是pbtxt后缀的文本文件</li>
+<li>variables 模型参数数据目录<ul>
+<li>variables.index 模型索引文件</li>
+<li>variables.data-00000-of-00001 模型数据文件</li>
+</ul>
+</li>
+<li>assets.extra<ul>
+<li>tf_serving_warmup_requests 预热请求包，pb二进制文件</li>
+</ul>
+</li>
+</ul>
+<h1 id="模型加载流程"><a href="#模型加载流程" class="headerlink" title="模型加载流程"></a>模型加载流程</h1><p>参考上一篇文章中模型加载流程，模型加载时会调用LoadSavedModel函数用于加载模型。<br>这个函数调用LoadSavedModelInternal进行实际的加载操作:</p>
+<ul>
+<li>ReadMetaGraphDefFromSavedModel</li>
+<li>LoadMetaGraphIntoSession</li>
+<li>GetAssetFileDefs</li>
+<li>RunRestore</li>
+</ul>
+<p>其中RunRestore函数中加载了参数数据，具体操作是执行该模型图中<code>bundle-&gt;meta_graph_def.saver_def().restore_op_name()</code>算子。</p>
+<p>以half_plus_two_pbtxt为例，文件在tensorflow-1.15.0&#x2F;tensorflow&#x2F;cc&#x2F;saved_model&#x2F;testdata&#x2F;half_plus_two_pbtxt&#x2F;00000123&#x2F;saved_model.pbtxt。<br>图中saver_def内容如下:</p>
+<pre class="line-numbers language-none"><code class="language-none">saver_def &#123;
+    filename_tensor_name: &quot;save&#x2F;Const:0&quot;
+    save_tensor_name: &quot;save&#x2F;Identity:0&quot;
+    restore_op_name: &quot;save&#x2F;restore_all&quot;
+    max_to_keep: 5
+    sharded: true
+    keep_checkpoint_every_n_hours: 10000.0
+    version: V2
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>加载时需要执行”save&#x2F;restore_all”算子, 由于依赖关系，实际上需要执行多个算子。<br>使用netron工具打开图描述，可以看到如下:</p>
+<p><img data-src="/images/tf_netron.png"></p>
+<p>它本身是个NoOp，主要依赖了RestoreV2算子和Assign算子。其中，RestoreV2算子实际加载了数据。<br>RestoreV2算子代码在tensorflow-1.15.0&#x2F;tensorflow&#x2F;core&#x2F;kernels&#x2F;save_restore_v2_ops.cc中。</p>
+<p>整个流程包括:</p>
+<ol>
+<li>查询index文件的index段, 获取data块的信息</li>
+<li>查询index文件的data段中的块,获得数据段信息</li>
+<li>根据数据段信息,从data文件中截取数据.</li>
+</ol>
+<p>整个调用栈:</p>
+<ul>
+<li>RestoreV2::Compute 数据加载<ul>
+<li>ValidateInputs 校验</li>
+<li>RestoreTensorsV2 加载数据<ul>
+<li>校验tensor_name的类型</li>
+<li>遍历拆分队列(维度多的多线程跑，维度小的单线程跑)</li>
+<li>RestoreOp::run 加载一个tensor name<ul>
+<li>BundleReader::LookupTensorShape 获取形状</li>
+<li>BundleReader::Lookup 没设置shape_and_slice</li>
+<li>BundleReader::LookupSlice 有设置 shape_and_slice</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>RestoreOp::run运行时会创建BunleReader对象，这里涉及到一个初始化过程:</p>
+<ul>
+<li>解析footer</li>
+<li>加载index文件的index段</li>
+<li>读取header数据</li>
+</ul>
+<p>header的结构为BundleHeaderProto, 定义如下:</p>
+<pre class="line-numbers language-none"><code class="language-none">message BundleHeaderProto &#123;
+    &#x2F;&#x2F; Number of data files in the bundle.
+    int32 num_shards &#x3D; 1;
+
+    &#x2F;&#x2F; An enum indicating the endianness of the platform that produced this
+    &#x2F;&#x2F; bundle.  A bundle can only be read by a platform with matching endianness.
+    &#x2F;&#x2F; Defaults to LITTLE, as most modern platforms are little-endian.
+    &#x2F;&#x2F;
+    &#x2F;&#x2F; Affects the binary tensor data bytes only, not the metadata in protobufs.
+    enum Endianness &#123;
+        LITTLE &#x3D; 0;
+        BIG &#x3D; 1;
+    &#125;
+    Endianness endianness &#x3D; 2;
+
+    &#x2F;&#x2F; Versioning of the tensor bundle format.
+    VersionDef version &#x3D; 3;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>header数据的key为空字符串，header中保存了分片数量，即data文件的数量。</p>
+<p>BundleReader::Lookup的逻辑如下:</p>
+<ul>
+<li>BundleReader::GetBundleEntryProto 获取pb结构<ul>
+<li>BundleReader::Seek<ul>
+<li>TwoLevelIterator::Seek<ul>
+<li>index_iter_-&gt;Seek 在index块中找到target</li>
+<li>TwoLevelIterator::InitDataBlock 设置data_iter(没有就创建)</li>
+<li>data_iter_-&gt;Seek 在data块中查找target</li>
+<li>TwoLevelIterator::SkipEmptyDataBlocksForward</li>
+</ul>
+</li>
+<li>ParseEntryProto 数据解析成BundleEntryProto结构</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>GetValue 根据BundleEntryProto结构中的信息，在data文件中读取数据</li>
+<li>GetSliceValue 分段读取数据</li>
+</ul>
+<p>其中GetValue和GetSliceValue是两选一。<br>如果在调用BundleReader::GetBundleEntryProto拿到的BundleEntryProto结构中有slices结构,则表示数据进行分段了,<br>需要拼接一组新的key,然后依次调用BundleReader::GetBundleEntryProto和GetValue获取数据.</p>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;&#x2F; Describes the metadata related to a checkpointed tensor.
+message BundleEntryProto &#123;
+    &#x2F;&#x2F; The tensor dtype and shape.
+    DataType dtype &#x3D; 1;
+    TensorShapeProto shape &#x3D; 2;
+    &#x2F;&#x2F; The binary content of the tensor lies in:
+    &#x2F;&#x2F;   File &quot;shard_id&quot;: bytes [offset, offset + size).
+    int32 shard_id &#x3D; 3;
+    int64 offset &#x3D; 4;
+    int64 size &#x3D; 5;
+
+    &#x2F;&#x2F; The CRC32C checksum of the tensor bytes.
+    fixed32 crc32c &#x3D; 6;
+
+    &#x2F;&#x2F; Iff present, this entry represents a partitioned tensor.  The previous
+    &#x2F;&#x2F; fields are interpreted as follows:
+    &#x2F;&#x2F;
+    &#x2F;&#x2F;   &quot;dtype&quot;, &quot;shape&quot;: describe the full tensor.
+    &#x2F;&#x2F;   &quot;shard_id&quot;, &quot;offset&quot;, &quot;size&quot;, &quot;crc32c&quot;: all IGNORED.
+    &#x2F;&#x2F;      These information for each slice can be looked up in their own
+    &#x2F;&#x2F;      BundleEntryProto, keyed by each &quot;slice_name&quot;.
+    repeated TensorSliceProto slices &#x3D; 7;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>当slices为非空时，表示当前数据采用了分段的方式，就会调用GetSliceValue。<br>这个函数中会根据tensor_name和slices数据，生成一个key列表，然后再走一边BundleReader::GetBundleEntryProto和<br>GetValue获取实际的数据。</p>
+<h1 id="模型数据结构"><a href="#模型数据结构" class="headerlink" title="模型数据结构"></a>模型数据结构</h1><p>如果看过leveldb源码，就会发现，这两个代码的分段逻辑出奇的相似。<br>index文件分为index段、data段和footer段三部分。</p>
+<p>footer段为48字节，末尾8个字节是magic字段用于校验，前面40字节中存储了四个vint64的数据，分别是：</p>
+<ul>
+<li>meta_index_handle<ul>
+<li>offset</li>
+<li>size</li>
+</ul>
+</li>
+<li>index_handle<ul>
+<li>offset</li>
+<li>size</li>
+</ul>
+</li>
+</ul>
+<p>其中index_index_handle记录index段的位置。<br>index段包括三个部分,数据部分(index_handle.size大小)、压缩flags（1字节）、校验位(4字节)。<br>数据部分包括entry结构数组、偏移数组、entry数量(4字节)，其中entry数组和偏移数组长度相同。<br>entry结构数组中的entry是按照entry.key进行排序的，也就是一个有序数组。<br>根据key进行查询时，先二分在偏移数组中查找，比较阶段会读取entry中的key进行比较。<br>找到index后，在entry中线性搜索，确认是否真是存在。</p>
+<p>entry中包含五个部分:</p>
+<ul>
+<li>shared 固定为0，</li>
+<li>noshared key的长度</li>
+<li>value_length value的长度</li>
+<li>key key数据</li>
+<li>value value数据</li>
+</ul>
+<p>shared字段存在的原因应该是跟leveldb结构保持一致，leveldb中块中的key分为前缀和后缀。<br>shared字段恒为0，表示并没有使用这个前缀后缀机制。</p>
+<p>data段的数据结构跟index段数据结构基本一致。<br>差别是index段中的value存两个vint64字段，分别表示key所在的data段的偏移和长度。<br>也就是查询时，先在index段中找到data段的偏移和长度，然后在众多data段中再次查找，找到对应的value。</p>
+<p>data段中的value是pb二进制文件，前面已经介绍过。</p>
+<p>index文件的结构如下:</p>
+<p><img data-src="/images/saved_model_file.png"></p>
+<p>data文件结构相对简单，data文件的数量记录在header中，即key为空字符串的value里。</p>
+<p>index文件里查询出的BundleEntryProto结构，可以定位到(shared_id, offset, size)三元组，直接读取即可。</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/tensorflow/" rel="tag"># tensorflow</a>
+              <a href="/tags/saved-model/" rel="tag"># saved model</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/ad28feb4.html" rel="prev" title="tfserving模型策略整理">
+                  <i class="fa fa-angle-left"></i> tfserving模型策略整理
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/c1f760b3.html" rel="next" title="taskflow源码学习及使用">
+                  taskflow源码学习及使用 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

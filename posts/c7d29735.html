@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="NV Embedding Cache SDK 的插件系统深度分析 — C 符号约定 + dlopen 动态加载 + 抽象工厂模式，涵盖 5 种存储后端插件。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="plugin-system">
+<meta property="og:url" content="https://phantom9999.github.io/posts/c7d29735.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="NV Embedding Cache SDK 的插件系统深度分析 — C 符号约定 + dlopen 动态加载 + 抽象工厂模式，涵盖 5 种存储后端插件。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-30T16:37:59.000Z">
+<meta property="article:modified_time" content="2026-05-30T16:37:59.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="C++">
+<meta property="article:tag" content="Embedding">
+<meta property="article:tag" content="NVEmbeddingCache">
+<meta property="article:tag" content="NVIDIA">
+<meta property="article:tag" content="Plugin">
+<meta property="article:tag" content="dlopen">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/c7d29735.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/c7d29735.html","path":"posts/c7d29735.html","title":"plugin-system"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>plugin-system | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#NVE-%E6%8F%92%E4%BB%B6%E7%B3%BB%E7%BB%9F"><span class="nav-number">1.</span> <span class="nav-text">NVE 插件系统</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E6%80%BB%E4%BD%93%E6%9E%B6%E6%9E%84"><span class="nav-number">1.1.</span> <span class="nav-text">一、总体架构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E3%80%81%E6%8F%92%E4%BB%B6%E6%8E%A5%E5%8F%A3%E5%AE%9A%E4%B9%89"><span class="nav-number">1.2.</span> <span class="nav-text">二、插件接口定义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E3%80%81%E8%BF%90%E8%A1%8C%E6%97%B6%E5%8A%A0%E8%BD%BD%E6%9C%BA%E5%88%B6"><span class="nav-number">1.3.</span> <span class="nav-text">三、运行时加载机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-1-%E2%80%94-dlopen-%E5%8A%A0%E8%BD%BD-so"><span class="nav-number">1.3.1.</span> <span class="nav-text">Step 1 — dlopen 加载 .so</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-2-%E2%80%94-dlsym-%E8%A7%A3%E6%9E%90-3-%E4%B8%AA%E5%BF%85%E9%9C%80%E7%AC%A6%E5%8F%B7"><span class="nav-number">1.3.2.</span> <span class="nav-text">Step 2 — dlsym 解析 3 个必需符号</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-3-%E2%80%94-%E6%9E%9A%E4%B8%BE%E6%B3%A8%E5%86%8C%E5%AE%9E%E7%8E%B0"><span class="nav-number">1.3.3.</span> <span class="nav-text">Step 3 — 枚举注册实现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-4-%E2%80%94-%E6%8C%89-JSON-%E9%85%8D%E7%BD%AE%E7%94%9F%E4%BA%A7%E8%A1%A8"><span class="nav-number">1.3.4.</span> <span class="nav-text">Step 4 — 按 JSON 配置生产表</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E3%80%81%E7%B1%BB%E7%BB%A7%E6%89%BF%E4%BD%93%E7%B3%BB"><span class="nav-number">1.4.</span> <span class="nav-text">四、类继承体系</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B7%A5%E5%8E%82%E7%B1%BB%E5%B1%82%E6%AC%A1"><span class="nav-number">1.4.1.</span> <span class="nav-text">工厂类层次</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%94%E3%80%815-%E4%B8%AA%E6%8F%92%E4%BB%B6%E8%AF%A6%E8%A7%A3"><span class="nav-number">1.5.</span> <span class="nav-text">五、5 个插件详解</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#5-1-NVHM-%E6%8F%92%E4%BB%B6%EF%BC%88libnve-plugin-nvhm-so%EF%BC%89"><span class="nav-number">1.5.1.</span> <span class="nav-text">5.1 NVHM 插件（libnve-plugin-nvhm.so）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-2-Abseil-%E6%8F%92%E4%BB%B6%EF%BC%88libnve-plugin-abseil-so%EF%BC%89"><span class="nav-number">1.5.2.</span> <span class="nav-text">5.2 Abseil 插件（libnve-plugin-abseil.so）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-3-PHMAP-%E6%8F%92%E4%BB%B6%EF%BC%88libnve-plugin-phmap-so%EF%BC%89"><span class="nav-number">1.5.3.</span> <span class="nav-text">5.3 PHMAP 插件（libnve-plugin-phmap.so）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-4-Redis-%E6%8F%92%E4%BB%B6%EF%BC%88libnve-plugin-redis-so%EF%BC%89"><span class="nav-number">1.5.4.</span> <span class="nav-text">5.4 Redis 插件（libnve-plugin-redis.so）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-5-RocksDB-%E6%8F%92%E4%BB%B6%EF%BC%88libnve-plugin-rocksdb-so%EF%BC%89"><span class="nav-number">1.5.5.</span> <span class="nav-text">5.5 RocksDB 插件（libnve-plugin-rocksdb.so）</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AD%E3%80%81%E5%86%85%E7%BD%AE%E9%99%8D%E7%BA%A7%E5%AE%9E%E7%8E%B0%EF%BC%88%E6%97%A0%E6%8F%92%E4%BB%B6%EF%BC%89"><span class="nav-number">1.6.</span> <span class="nav-text">六、内置降级实现（无插件）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%83%E3%80%81%E7%BC%96%E8%AF%91%E6%97%B6%E7%89%B9%E5%BE%81%E6%8E%A7%E5%88%B6"><span class="nav-number">1.7.</span> <span class="nav-text">七、编译时特征控制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AB%E3%80%81JSON-%E8%BF%90%E8%A1%8C%E6%97%B6%E9%85%8D%E7%BD%AE%E7%A4%BA%E4%BE%8B"><span class="nav-number">1.8.</span> <span class="nav-text">八、JSON 运行时配置示例</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B9%9D%E3%80%81%E6%80%BB%E7%BB%93"><span class="nav-number">1.9.</span> <span class="nav-text">九、总结</span></a></li></ol></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/c7d29735.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="plugin-system | phantom9999的博客">
+      <meta itemprop="description" content="NV Embedding Cache SDK 的插件系统深度分析 — C 符号约定 + dlopen 动态加载 + 抽象工厂模式，涵盖 5 种存储后端插件。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          plugin-system
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2026-05-30 16:37:59" itemprop="dateCreated datePublished" datetime="2026-05-30T16:37:59+00:00">2026-05-30</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/inference/" itemprop="url" rel="index"><span itemprop="name">inference</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">NV Embedding Cache SDK 的插件系统深度分析 — C 符号约定 + dlopen 动态加载 + 抽象工厂模式，涵盖 5 种存储后端插件。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="NVE-插件系统"><a href="#NVE-插件系统" class="headerlink" title="NVE 插件系统"></a>NVE 插件系统</h1><h2 id="一、总体架构"><a href="#一、总体架构" class="headerlink" title="一、总体架构"></a>一、总体架构</h2><p>NVE 的插件系统是一套 <strong>C 符号约定 + 抽象工厂 + 动态加载</strong> 的架构，用于提供多种<strong>宿主表（HostTable）存储后端</strong>。整体分三层：</p>
+<pre class="line-numbers language-none"><code class="language-none">        ┌──────────────────────────────────┐
+        │      build_host_database()       │  ← 顶层编排函数
+        └────┬─────────────┬───────────────┘
+             │             │
+┌────────────▼──┐   ┌──────▼──────────────┐
+│  load_plugin()│   │  resolve_factory()   │
+│  dlopen .so   │   │  htf_impls[] map     │
+└────┬──────────┘   └──────┬──────────────┘
+     │                      │
+┌────▼──────────────────────▼──────────────────┐
+│         静态注册的内置实现                     │
+│   &quot;stl_map&quot; &#x2F; &quot;map&quot; &#x2F; &quot;umap&quot; &#x2F; &quot;unordered_map&quot;│
+│   → STLMapTableFactory                        │
+└───────────────────────────────────────────────┘<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="二、插件接口定义"><a href="#二、插件接口定义" class="headerlink" title="二、插件接口定义"></a>二、插件接口定义</h2><p>插件 API 是一组 <strong>C 链接函数指针类型定义</strong>，而非 C++ 虚基类：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">namespace</span> nve <span class="token punctuation">&#123;</span>
+
+<span class="token keyword">using</span> plugin_info_t <span class="token operator">=</span> <span class="token keyword">const</span> <span class="token keyword">char</span><span class="token operator">*</span> <span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>                                          <span class="token comment">// 插件元信息</span>
+<span class="token keyword">using</span> enum_implementations_t <span class="token operator">=</span> <span class="token keyword">void</span> <span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">,</span> <span class="token keyword">void</span> <span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token punctuation">,</span> <span class="token keyword">const</span> <span class="token keyword">char</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>    <span class="token comment">// 枚举实现</span>
+<span class="token keyword">using</span> create_host_table_factory_t <span class="token operator">=</span> <span class="token function">host_table_factory_ptr_t</span> <span class="token punctuation">(</span><span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token keyword">const</span> nlohmann<span class="token double-colon punctuation">::</span>json<span class="token operator">&amp;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 工厂创建</span>
+
+<span class="token punctuation">&#125;</span>  <span class="token comment">// namespace nve</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>每个插件 <code>.so</code> <strong>必须导出</strong>以下 3 个 C 链接函数：</p>
+<table>
+<thead>
+<tr>
+<th>导出的 C 符号</th>
+<th>签名</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>plugin_ident()</code></td>
+<td><code>extern &quot;C&quot; const char*()</code></td>
+<td>返回插件人类可读名称</td>
+</tr>
+<tr>
+<td><code>plugin_developer()</code></td>
+<td><code>extern &quot;C&quot; const char*()</code></td>
+<td>返回开发者名称</td>
+</tr>
+<tr>
+<td><code>enum_host_table_implementations()</code></td>
+<td><code>extern &quot;C&quot; void(void*, void(*)(void*,const char*))</code></td>
+<td>遍历注册插件内所有实现</td>
+</tr>
+<tr>
+<td><code>create_{name}_table_factory()</code></td>
+<td><code>extern &quot;C&quot; host_table_factory_ptr_t(const nlohmann::json&amp;)</code></td>
+<td>每个实现一个，创建工厂对象</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>这不是 C++ 虚基类，而是<strong>纯 C 符号约定</strong>——任何遵守这个符号约定的 <code>.so</code> 都可以被 <code>dlopen</code> + <code>dlsym</code> 动态加载。</p>
+</blockquote>
+<hr>
+<h2 id="三、运行时加载机制"><a href="#三、运行时加载机制" class="headerlink" title="三、运行时加载机制"></a>三、运行时加载机制</h2><p>加载流程在 <code>src/host_table.cpp</code> 中实现，共 4 步：</p>
+<h3 id="Step-1-—-dlopen-加载-so"><a href="#Step-1-—-dlopen-加载-so" class="headerlink" title="Step 1 — dlopen 加载 .so"></a>Step 1 — <code>dlopen</code> 加载 <code>.so</code></h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">void</span> <span class="token function">load_host_table_plugin</span><span class="token punctuation">(</span><span class="token keyword">const</span> std<span class="token double-colon punctuation">::</span>string_view<span class="token operator">&amp;</span> plugin_name<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">void</span><span class="token operator">*</span> dll <span class="token operator">=</span> <span class="token function">dlopen</span><span class="token punctuation">(</span>plugin_path<span class="token punctuation">.</span><span class="token function">c_str</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> RTLD_NOW <span class="token operator">|</span> RTLD_GLOBAL<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token comment">// 如果给定路径失败，回退到相对于当前 .so 的路径</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="Step-2-—-dlsym-解析-3-个必需符号"><a href="#Step-2-—-dlsym-解析-3-个必需符号" class="headerlink" title="Step 2 — dlsym 解析 3 个必需符号"></a>Step 2 — <code>dlsym</code> 解析 3 个必需符号</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">plugin_info_t plugin_ident <span class="token operator">=</span> <span class="token function">dlsym</span><span class="token punctuation">(</span>dll<span class="token punctuation">,</span> <span class="token string">"plugin_ident"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+plugin_info_t plugin_dev   <span class="token operator">=</span> <span class="token function">dlsym</span><span class="token punctuation">(</span>dll<span class="token punctuation">,</span> <span class="token string">"plugin_developer"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+enum_implementations_t enum_ht <span class="token operator">=</span> <span class="token function">dlsym</span><span class="token punctuation">(</span>dll<span class="token punctuation">,</span> <span class="token string">"enum_host_table_implementations"</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="Step-3-—-枚举注册实现"><a href="#Step-3-—-枚举注册实现" class="headerlink" title="Step 3 — 枚举注册实现"></a>Step 3 — 枚举注册实现</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token function">enum_ht</span><span class="token punctuation">(</span>dll<span class="token punctuation">,</span> register_implementation<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p><code>register_implementation</code> 回调函数构造 <code>&quot;create_{name}_table_factory&quot;</code> 字符串，再次 <code>dlsym</code> 解析工厂构造函数，存入全局 <code>std::unordered_map&lt;string, create_host_table_factory_t&gt;</code>：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">static</span> std<span class="token double-colon punctuation">::</span>unordered_map<span class="token operator">&lt;</span>std<span class="token double-colon punctuation">::</span>string<span class="token punctuation">,</span> create_host_table_factory_t<span class="token operator">></span> htf_impls<span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<h3 id="Step-4-—-按-JSON-配置生产表"><a href="#Step-4-—-按-JSON-配置生产表" class="headerlink" title="Step 4 — 按 JSON 配置生产表"></a>Step 4 — 按 JSON 配置生产表</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">host_table_factory_ptr_t <span class="token function">create_host_table_factory</span><span class="token punctuation">(</span><span class="token keyword">const</span> nlohmann<span class="token double-colon punctuation">::</span>json<span class="token operator">&amp;</span> json<span class="token punctuation">)</span><span class="token punctuation">;</span>
+host_table_ptr_t factory<span class="token operator">-></span><span class="token function">produce</span><span class="token punctuation">(</span>table_id_t id<span class="token punctuation">,</span> <span class="token keyword">const</span> nlohmann<span class="token double-colon punctuation">::</span>json<span class="token operator">&amp;</span> config<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="四、类继承体系"><a href="#四、类继承体系" class="headerlink" title="四、类继承体系"></a>四、类继承体系</h2><pre class="line-numbers language-none"><code class="language-none">┌──────────────────────────────────────────────────────────────┐
+│                       nve::Table (abstract)                   │
+│  virtual clear() &#x2F; erase() &#x2F; find() &#x2F; insert() &#x2F; update()    │
+└──────────────────────────────────────────────────────────────┘
+                           ▲
+        ┌──────────────────┴──────────────────┐
+        │                                     │
+┌───────┴─────────────────────────┐  ┌────────┴────────────────┐
+│   nve::HostTableLike             │  │   GPU 端表 (抽象)       │
+│  + size() &#x2F; config() 等          │  │   (gpu_table.hpp)       │
+└──────────────────────────────────┘  └─────────────────────────┘
+        ▲
+┌───────┴─────────────────────────┐
+│   nve::HostTable&lt;ConfigType&gt;     │  ← CRTP 基类，存储 config
+└──────────────────────────────────┘
+        ▲
+        ├───────────────────────────────────┬───────────────────┐
+        │                                   │                   │
+┌───────┴──────────┐  ┌─────────────────────┴──┐  ┌─────────────┴──────────┐
+│ STLContainerTable│  │ NvhmMapTable            │  │ RedisClusterTable      │
+│ (umap &#x2F; map)     │  │ (GPU nvhashmap 后端)     │  │ (远程 Redis 集群)      │
+└──────────────────┘  └────────────────────────┘  └────────────────────────┘
+        ▲                        ▲
+    AbseilFlatMapTable           │
+    PHMapFlatMapTable            │
+    (继承 STLContainerTable)     │
+                                 │
+                        ┌────────┴──────────┐
+                        │ RocksDBTable       │
+                        │ (磁盘 LSM-Tree)    │
+                        └───────────────────┘<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<blockquote>
+<p><strong>关键区别</strong>：NVHM 插件直接继承 <code>HostTable&lt;NvhmMapTableConfig&gt;</code>，不走 STL 层。Abseil 和 PHMAP 继承 <code>STLContainerTable</code>，复用其分片、超额淘汰、内存管理等基础设施。Redis 和 RocksDB 各自独立继承 <code>HostTable</code>，因为它们操作的是远程网络连接或本地磁盘。</p>
+</blockquote>
+<h3 id="工厂类层次"><a href="#工厂类层次" class="headerlink" title="工厂类层次"></a>工厂类层次</h3><pre class="line-numbers language-none"><code class="language-none">HostTableLikeFactory  (抽象工厂基类)
+  └── HostTableFactory&lt;FactoryConfig, TableConfig&gt;  (模板工厂)
+        ├── STLMapTableFactory        → 内置（非插件）
+        ├── NvhmMapTableFactory       → NVHM 插件
+        ├── AbseilFlatMapTableFactory → Abseil 插件
+        ├── PHMapFlatMapTableFactory  → PHMAP 插件
+        ├── RedisClusterTableFactory  → Redis 插件
+        └── RocksDBTableFactory       → RocksDB 插件<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="五、5-个插件详解"><a href="#五、5-个插件详解" class="headerlink" title="五、5 个插件详解"></a>五、5 个插件详解</h2><h3 id="5-1-NVHM-插件（libnve-plugin-nvhm-so）"><a href="#5-1-NVHM-插件（libnve-plugin-nvhm-so）" class="headerlink" title="5.1 NVHM 插件（libnve-plugin-nvhm.so）"></a>5.1 NVHM 插件（<code>libnve-plugin-nvhm.so</code>）</h3><table>
+<thead>
+<tr>
+<th>属性</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>注册名</td>
+<td><code>nvhm_map</code></td>
+</tr>
+<tr>
+<td>底层库</td>
+<td>NVIDIA <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL05WSURJQS9udmhhc2htYXA=">nvhashmap<i class="fa fa-external-link-alt"></i></span> — GPU 端开放寻址哈希表</td>
+</tr>
+<tr>
+<td>存储位置</td>
+<td><strong>GPU device memory</strong></td>
+</tr>
+<tr>
+<td>数据持久化</td>
+<td>❌ 不持久</td>
+</tr>
+</tbody></table>
+<p><strong>核心配置</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>默认值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>num_partitions</code></td>
+<td>1</td>
+<td>独立分片数（必须为 2 的幂）</td>
+</tr>
+<tr>
+<td><code>kernel_size</code></td>
+<td>nvhashmap 默认</td>
+<td>内核大小 (1-1024)</td>
+</tr>
+<tr>
+<td><code>key_fetch_queue_length</code></td>
+<td>8</td>
+<td>软件预取管道长度 {0,1,2,4,8}</td>
+</tr>
+<tr>
+<td><code>prefetch_values</code></td>
+<td>true</td>
+<td>是否发出软件预取指令</td>
+</tr>
+<tr>
+<td><code>minimize_psl</code></td>
+<td>false</td>
+<td>是否缩短 probe search length</td>
+</tr>
+<tr>
+<td><code>auto_shrink</code></td>
+<td>false</td>
+<td>大量淘汰后是否自动缩容</td>
+</tr>
+<tr>
+<td><code>overflow_policy</code></td>
+<td>—</td>
+<td>淘汰策略（EvictRandom &#x2F; EvictLRU &#x2F; EvictLFU）</td>
+</tr>
+</tbody></table>
+<p><strong>模板分发</strong>：<code>produce()</code> 在多维 switch 上分发：<code>mask_size</code> × <code>key_size</code> × <code>overflow_handler</code> × <code>kernel_size</code> × <code>minimize_psl</code> × <code>auto_shrink</code> × <code>partitioner</code> → <strong>~6144 种</strong>编译时类型组合。</p>
+<hr>
+<h3 id="5-2-Abseil-插件（libnve-plugin-abseil-so）"><a href="#5-2-Abseil-插件（libnve-plugin-abseil-so）" class="headerlink" title="5.2 Abseil 插件（libnve-plugin-abseil.so）"></a>5.2 Abseil 插件（<code>libnve-plugin-abseil.so</code>）</h3><table>
+<thead>
+<tr>
+<th>属性</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>注册名</td>
+<td><code>abseil_flat_map</code></td>
+</tr>
+<tr>
+<td>底层库</td>
+<td>Google <code>absl::flat_hash_map&lt;KeyType, char*&gt;</code>（Swiss Table）</td>
+</tr>
+<tr>
+<td>存储位置</td>
+<td><strong>CPU 端内存</strong></td>
+</tr>
+<tr>
+<td>数据持久化</td>
+<td>❌ 不持久</td>
+</tr>
+</tbody></table>
+<p><strong>实现方式</strong>：继承 <code>STLContainerTable</code>，复用全部分片、内存槽管理、超额淘汰逻辑，底层哈希表替换为 <code>absl::flat_hash_map</code>。</p>
+<p><strong>链接依赖</strong>：<code>absl_raw_logging_internal</code> + <code>absl_hash</code> + <code>absl_raw_hash_set</code>。</p>
+<hr>
+<h3 id="5-3-PHMAP-插件（libnve-plugin-phmap-so）"><a href="#5-3-PHMAP-插件（libnve-plugin-phmap-so）" class="headerlink" title="5.3 PHMAP 插件（libnve-plugin-phmap.so）"></a>5.3 PHMAP 插件（<code>libnve-plugin-phmap.so</code>）</h3><table>
+<thead>
+<tr>
+<th>属性</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>注册名</td>
+<td><code>phmap_flat_map</code></td>
+</tr>
+<tr>
+<td>底层库</td>
+<td>greg7mdp <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL2dyZWc3bWRwL3BhcmFsbGVsLWhhc2htYXA=">parallel-hashmap<i class="fa fa-external-link-alt"></i></span> <code>phmap::flat_hash_map</code></td>
+</tr>
+<tr>
+<td>存储位置</td>
+<td><strong>CPU 端内存</strong></td>
+</tr>
+<tr>
+<td>数据持久化</td>
+<td>❌ 不持久</td>
+</tr>
+</tbody></table>
+<p><strong>实现方式</strong>：与 Abseil 插件完全对称——继承 <code>STLContainerTable</code>，底层替换为 <code>phmap::flat_hash_map</code>。模板分发维度：<code>mask_size</code> × <code>key_size</code> × <code>overflow_handler</code> × <code>partitioner</code> → <strong>~192 种</strong>类型组合。</p>
+<hr>
+<h3 id="5-4-Redis-插件（libnve-plugin-redis-so）"><a href="#5-4-Redis-插件（libnve-plugin-redis-so）" class="headerlink" title="5.4 Redis 插件（libnve-plugin-redis.so）"></a>5.4 Redis 插件（<code>libnve-plugin-redis.so</code>）</h3><table>
+<thead>
+<tr>
+<th>属性</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>注册名</td>
+<td><code>redis_cluster</code></td>
+</tr>
+<tr>
+<td>底层库</td>
+<td>hiredis + redis++ — TCP 连接 Redis Cluster</td>
+</tr>
+<tr>
+<td>存储位置</td>
+<td><strong>远程 Redis 集群</strong></td>
+</tr>
+<tr>
+<td>数据持久化</td>
+<td>✅ <strong>持久化</strong></td>
+</tr>
+</tbody></table>
+<p><strong>核心配置</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>默认值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>address</code></td>
+<td><code>localhost:6379</code></td>
+<td>Redis 集群任意节点地址</td>
+</tr>
+<tr>
+<td><code>user_name</code></td>
+<td><code>default</code></td>
+<td>Redis 用户名</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>空</td>
+<td>Redis 用户密码</td>
+</tr>
+<tr>
+<td><code>connections_per_node</code></td>
+<td>5</td>
+<td>与每个 Redis 节点的最大并行连接数</td>
+</tr>
+<tr>
+<td><code>connection_lifetime</code></td>
+<td>180 秒</td>
+<td>连接生命周期</td>
+</tr>
+<tr>
+<td><code>max_batch_size</code></td>
+<td>16384</td>
+<td>批量查询的最大 batch size</td>
+</tr>
+</tbody></table>
+<p><strong>链接依赖</strong>：<code>hiredis</code> + <code>hiredis_ssl</code> + <code>redis++_static</code> + <code>ssl</code> + <code>crypto</code>。</p>
+<hr>
+<h3 id="5-5-RocksDB-插件（libnve-plugin-rocksdb-so）"><a href="#5-5-RocksDB-插件（libnve-plugin-rocksdb-so）" class="headerlink" title="5.5 RocksDB 插件（libnve-plugin-rocksdb.so）"></a>5.5 RocksDB 插件（<code>libnve-plugin-rocksdb.so</code>）</h3><table>
+<thead>
+<tr>
+<th>属性</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>注册名</td>
+<td><code>rocksdb</code></td>
+</tr>
+<tr>
+<td>底层库</td>
+<td>Facebook <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL2ZhY2Vib29rL3JvY2tzZGI=">RocksDB<i class="fa fa-external-link-alt"></i></span>（LSM-Tree）</td>
+</tr>
+<tr>
+<td>存储位置</td>
+<td><strong>本地磁盘</strong></td>
+</tr>
+<tr>
+<td>数据持久化</td>
+<td>✅ <strong>持久化</strong></td>
+</tr>
+</tbody></table>
+<p><strong>核心配置</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>默认值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>column_family</code></td>
+<td><code>default</code></td>
+<td>RocksDB Column Family 名称</td>
+</tr>
+<tr>
+<td><code>max_batch_size</code></td>
+<td>16384</td>
+<td>批量操作的最大 batch size</td>
+</tr>
+<tr>
+<td><code>verify_checksums</code></td>
+<td>true</td>
+<td>是否校验 checksum</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td><code>/tmp/rocksdb</code></td>
+<td>数据库文件系统路径</td>
+</tr>
+<tr>
+<td><code>read_only</code></td>
+<td>false</td>
+<td>只读模式（允许多客户端并发读取）</td>
+</tr>
+<tr>
+<td><code>num_threads</code></td>
+<td>16</td>
+<td>RocksDB 实例可用线程数</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="六、内置降级实现（无插件）"><a href="#六、内置降级实现（无插件）" class="headerlink" title="六、内置降级实现（无插件）"></a>六、内置降级实现（无插件）</h2><p>即使不加载任何插件，也有 6 个别名指向同一个内置实现：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">static</span> std<span class="token double-colon punctuation">::</span>unordered_map<span class="token operator">&lt;</span>std<span class="token double-colon punctuation">::</span>string<span class="token punctuation">,</span> create_host_table_factory_t<span class="token operator">></span> htf_impls<span class="token punctuation">&#123;</span>
+    <span class="token punctuation">&#123;</span><span class="token string">"stl_map"</span><span class="token punctuation">,</span> create_stl_map_table_factory<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#123;</span><span class="token string">"map"</span><span class="token punctuation">,</span> create_stl_map_table_factory<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#123;</span><span class="token string">"stl_unordered_map"</span><span class="token punctuation">,</span> create_stl_map_table_factory<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#123;</span><span class="token string">"unordered_map"</span><span class="token punctuation">,</span> create_stl_map_table_factory<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#123;</span><span class="token string">"stl_umap"</span><span class="token punctuation">,</span> create_stl_map_table_factory<span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token punctuation">&#123;</span><span class="token string">"umap"</span><span class="token punctuation">,</span> create_stl_map_table_factory<span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>底层使用 <code>std::unordered_map&lt;KeyType, char*&gt;</code> + 手动管理的内存槽（slot buffer），带分片（<code>shared_mutex</code>）、inline meta（LRU&#x2F;LFU 标记）、超额淘汰逻辑。</p>
+<hr>
+<h2 id="七、编译时特征控制"><a href="#七、编译时特征控制" class="headerlink" title="七、编译时特征控制"></a>七、编译时特征控制</h2><p>在 <code>CMakeLists.txt</code> 中定义：</p>
+<pre class="line-numbers language-cmake" data-language="cmake"><code class="language-cmake"><span class="token keyword">set</span><span class="token punctuation">(</span>NVE_AVAILABLE_FEATURES <span class="token string">""</span><span class="token punctuation">)</span>
+<span class="token keyword">list</span><span class="token punctuation">(</span>APPEND NVE_AVAILABLE_FEATURES
+  <span class="token string">"abseil_plugin"</span> <span class="token string">"nvhm_plugin"</span> <span class="token string">"phmap_plugin"</span>
+  <span class="token string">"redis_plugin"</span> <span class="token string">"rocksdb_plugin"</span>
+<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ul>
+<li><strong>默认</strong>（<code>NVE_DEFAULT_FEATURES</code>）：启用全部 5 个插件 + <code>ht_key_32</code> + <code>ht_kernel_128</code></li>
+<li><strong>最小</strong>（<code>NVE_MINIMAL_FEATURES</code>）：仅 <code>ht_mask_64 + ht_key_64 + ht_part_fnv1a + ht_kernel_64</code>，无插件</li>
+<li>可通过 <code>-DNVE_DISABLE_PLUGINS=1</code> 或 <code>-DNVE_FEATURES=&quot;nvhm_plugin redis_plugin&quot;</code> 定制</li>
+</ul>
+<p>每个启用的 feature 转换为 C++ 编译宏 <code>-DNVE_FEATURE_{NAME}=1</code>，用于模板分发的条件编译。</p>
+<hr>
+<h2 id="八、JSON-运行时配置示例"><a href="#八、JSON-运行时配置示例" class="headerlink" title="八、JSON 运行时配置示例"></a>八、JSON 运行时配置示例</h2><pre class="line-numbers language-json" data-language="json"><code class="language-json"><span class="token punctuation">&#123;</span>
+  <span class="token property">"plugins"</span><span class="token operator">:</span> <span class="token punctuation">[</span><span class="token string">"libnve-plugin-redis.so"</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+  <span class="token property">"table_factories"</span><span class="token operator">:</span> <span class="token punctuation">&#123;</span>
+    <span class="token property">"my_redis_factory"</span><span class="token operator">:</span> <span class="token punctuation">&#123;</span>
+      <span class="token property">"implementation"</span><span class="token operator">:</span> <span class="token string">"redis_cluster"</span><span class="token punctuation">,</span>
+      <span class="token property">"address"</span><span class="token operator">:</span> <span class="token string">"my-redis-cluster:6379"</span><span class="token punctuation">,</span>
+      <span class="token property">"password"</span><span class="token operator">:</span> <span class="token string">"****"</span><span class="token punctuation">,</span>
+      <span class="token property">"connections_per_node"</span><span class="token operator">:</span> <span class="token number">10</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    <span class="token property">"my_nvhm_factory"</span><span class="token operator">:</span> <span class="token punctuation">&#123;</span>
+      <span class="token property">"implementation"</span><span class="token operator">:</span> <span class="token string">"nvhm_map"</span><span class="token punctuation">,</span>
+      <span class="token property">"key_size"</span><span class="token operator">:</span> <span class="token number">8</span><span class="token punctuation">,</span>
+      <span class="token property">"mask_size"</span><span class="token operator">:</span> <span class="token number">64</span><span class="token punctuation">,</span>
+      <span class="token property">"max_value_size"</span><span class="token operator">:</span> <span class="token number">8192</span><span class="token punctuation">,</span>
+      <span class="token property">"value_dtype"</span><span class="token operator">:</span> <span class="token string">"float32"</span><span class="token punctuation">,</span>
+      <span class="token property">"num_partitions"</span><span class="token operator">:</span> <span class="token number">4</span><span class="token punctuation">,</span>
+      <span class="token property">"overflow_policy"</span><span class="token operator">:</span> <span class="token punctuation">&#123;</span>
+        <span class="token property">"handler"</span><span class="token operator">:</span> <span class="token string">"EvictLRU"</span><span class="token punctuation">,</span>
+        <span class="token property">"overflow_margin"</span><span class="token operator">:</span> <span class="token number">512</span><span class="token punctuation">,</span>
+        <span class="token property">"resolution_margin"</span><span class="token operator">:</span> <span class="token number">0.2</span>
+      <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+  <span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+  <span class="token property">"tables"</span><span class="token operator">:</span> <span class="token punctuation">&#123;</span>
+    <span class="token property">"0"</span><span class="token operator">:</span> <span class="token string">"my_redis_factory"</span><span class="token punctuation">,</span>
+    <span class="token property">"1"</span><span class="token operator">:</span> <span class="token string">"my_nvhm_factory"</span>
+  <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>代码调用：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">auto</span> db <span class="token operator">=</span> nve<span class="token double-colon punctuation">::</span><span class="token function">build_host_database</span><span class="token punctuation">(</span>json<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">auto</span><span class="token operator">&amp;</span> table0 <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">at</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// Redis 集群表</span>
+<span class="token keyword">auto</span><span class="token operator">&amp;</span> table1 <span class="token operator">=</span> db<span class="token punctuation">.</span><span class="token function">at</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// NVHM GPU 哈希表</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="九、总结"><a href="#九、总结" class="headerlink" title="九、总结"></a>九、总结</h2><table>
+<thead>
+<tr>
+<th>维度</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>架构风格</strong></td>
+<td>C 符号约定 + <code>dlopen</code>&#x2F;<code>dlsym</code> 动态加载 + 抽象工厂模式</td>
+</tr>
+<tr>
+<td><strong>不是</strong></td>
+<td>C++ 虚基类插件，而是 <strong>extern “C” 符号 + dlsym 解析</strong></td>
+</tr>
+<tr>
+<td><strong>5 种存储后端</strong></td>
+<td>GPU 端（NVHM）、CPU 端内存（Abseil&#x2F;PHMAP）、远程（Redis）、持久化磁盘（RocksDB）</td>
+</tr>
+<tr>
+<td><strong>内置降级</strong></td>
+<td><code>std::unordered_map</code> 实现无需任何插件即可运行</td>
+</tr>
+<tr>
+<td><strong>模板分发</strong></td>
+<td>多维 switch 分发到编译时特化模板类，最多 6144 种组合</td>
+</tr>
+<tr>
+<td><strong>构建&#x2F;运行时解耦</strong></td>
+<td>编译时通过 <code>NVE_FEATURES</code> 选择构建内容，运行时通过 <code>dlopen</code> 按需加载</td>
+</tr>
+</tbody></table>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/NVIDIA/" rel="tag"># NVIDIA</a>
+              <a href="/tags/Embedding/" rel="tag"># Embedding</a>
+              <a href="/tags/NVEmbeddingCache/" rel="tag"># NVEmbeddingCache</a>
+              <a href="/tags/Plugin/" rel="tag"># Plugin</a>
+              <a href="/tags/C/" rel="tag"># C++</a>
+              <a href="/tags/dlopen/" rel="tag"># dlopen</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/c474f32c.html" rel="prev" title="tables-overview">
+                  <i class="fa fa-angle-left"></i> tables-overview
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/b4c73ab2.html" rel="next" title="advanced-usage">
+                  advanced-usage <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

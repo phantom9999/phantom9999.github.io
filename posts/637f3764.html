@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="深入解析 Folly 中 ConcurrentHashMap 和 AtomicHashMap 的底层实现原理，包括分片锁机制、无锁读取、CAS 操作、hazard pointer 内存回收等。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="talk_concurrent_hashmap">
+<meta property="og:url" content="https://phantom9999.github.io/posts/637f3764.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="深入解析 Folly 中 ConcurrentHashMap 和 AtomicHashMap 的底层实现原理，包括分片锁机制、无锁读取、CAS 操作、hazard pointer 内存回收等。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-11-08T22:45:33.000Z">
+<meta property="article:modified_time" content="2026-05-24T23:36:52.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="c++">
+<meta property="article:tag" content="concurrent-hashmap">
+<meta property="article:tag" content="folly">
+<meta property="article:tag" content="并发数据结构">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/637f3764.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/637f3764.html","path":"posts/637f3764.html","title":"talk_concurrent_hashmap"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>talk_concurrent_hashmap | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#ConcurrentHashMap-%E6%9E%B6%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">ConcurrentHashMap 架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E6%9D%BF%E5%8F%82%E6%95%B0"><span class="nav-number">2.1.</span> <span class="nav-text">模板参数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%88%86%E7%89%87%E9%94%81%EF%BC%88Sharded-Locking%EF%BC%89%E8%AE%BE%E8%AE%A1"><span class="nav-number">2.2.</span> <span class="nav-text">分片锁（Sharded Locking）设计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%93%88%E5%B8%8C%E5%80%BC%E7%9A%84%E4%BD%BF%E7%94%A8"><span class="nav-number">2.3.</span> <span class="nav-text">哈希值的使用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B9%B6%E5%8F%91%E6%93%8D%E4%BD%9C%E5%AE%9E%E7%8E%B0"><span class="nav-number">2.4.</span> <span class="nav-text">并发操作实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%AF%BB%E5%8F%96%EF%BC%88find%EF%BC%89"><span class="nav-number">2.4.1.</span> <span class="nav-text">读取（find）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%8F%92%E5%85%A5%EF%BC%88insert-insert-or-assign%EF%BC%89"><span class="nav-number">2.4.2.</span> <span class="nav-text">插入（insert &#x2F; insert_or_assign）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%88%A0%E9%99%A4%EF%BC%88erase%EF%BC%89"><span class="nav-number">2.4.3.</span> <span class="nav-text">删除（erase）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#assign-if-equal%EF%BC%88%E5%8E%9F%E5%AD%90%E6%9D%A1%E4%BB%B6%E6%9B%B4%E6%96%B0%EF%BC%89"><span class="nav-number">2.4.4.</span> <span class="nav-text">assign_if_equal（原子条件更新）</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Hazard-Pointer-%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6"><span class="nav-number">2.5.</span> <span class="nav-text">Hazard Pointer 内存回收</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#AtomicHashMap-%E6%9E%B6%E6%9E%84"><span class="nav-number">3.</span> <span class="nav-text">AtomicHashMap 架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E8%AE%BE%E8%AE%A1"><span class="nav-number">3.1.</span> <span class="nav-text">核心设计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#AHA%EF%BC%9A%E5%BC%80%E6%94%BE%E5%AF%BB%E5%9D%80-CAS"><span class="nav-number">3.2.</span> <span class="nav-text">AHA：开放寻址 + CAS</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%99%90%E5%88%B6"><span class="nav-number">3.3.</span> <span class="nav-text">限制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88-AtomicHashMap-%E6%9B%B4%E5%BF%AB%EF%BC%88%E7%89%B9%E5%AE%9A%E5%9C%BA%E6%99%AF%EF%BC%89"><span class="nav-number">3.4.</span> <span class="nav-text">为什么 AtomicHashMap 更快（特定场景）</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%A7%E8%83%BD%E5%AF%B9%E6%AF%94"><span class="nav-number">4.</span> <span class="nav-text">性能对比</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%BD%BF%E7%94%A8%E5%BB%BA%E8%AE%AE"><span class="nav-number">5.</span> <span class="nav-text">使用建议</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">6.</span> <span class="nav-text">总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/637f3764.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="talk_concurrent_hashmap | phantom9999的博客">
+      <meta itemprop="description" content="深入解析 Folly 中 ConcurrentHashMap 和 AtomicHashMap 的底层实现原理，包括分片锁机制、无锁读取、CAS 操作、hazard pointer 内存回收等。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          talk_concurrent_hashmap
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-11-08 22:45:33" itemprop="dateCreated datePublished" datetime="2022-11-08T22:45:33+00:00">2022-11-08</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2026-05-24 23:36:52" itemprop="dateModified" datetime="2026-05-24T23:36:52+00:00">2026-05-24</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/cpp-devel/" itemprop="url" rel="index"><span itemprop="name">cpp-devel</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">深入解析 Folly 中 ConcurrentHashMap 和 AtomicHashMap 的底层实现原理，包括分片锁机制、无锁读取、CAS 操作、hazard pointer 内存回收等。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>Folly 是 Facebook 开源的 C++ 基础库，其中提供了两种高性能并发哈希表：</p>
+<ul>
+<li><strong>AtomicHashMap</strong>：基于 CAS + 开放寻址，适合 int32&#x2F;int64 键的高并发场景</li>
+<li><strong>ConcurrentHashMap</strong>：基于分片锁 + hazard pointer，支持任意键值类型</li>
+</ul>
+<p>本文深入解析两者的底层实现。</p>
+<h1 id="ConcurrentHashMap-架构"><a href="#ConcurrentHashMap-架构" class="headerlink" title="ConcurrentHashMap 架构"></a>ConcurrentHashMap 架构</h1><p>ConcurrentHashMap 是 Folly 中功能最完整的并发哈希表，与 <code>std::unordered_map</code> 接口相近，但线程安全。</p>
+<h2 id="模板参数"><a href="#模板参数" class="headerlink" title="模板参数"></a>模板参数</h2><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">template</span> <span class="token operator">&lt;</span>
+    <span class="token keyword">typename</span> <span class="token class-name">KeyType</span><span class="token punctuation">,</span>
+    <span class="token keyword">typename</span> <span class="token class-name">ValueType</span><span class="token punctuation">,</span>
+    <span class="token keyword">typename</span> <span class="token class-name">Hash</span> <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span>hash<span class="token operator">&lt;</span>KeyType<span class="token operator">></span><span class="token punctuation">,</span>
+    <span class="token keyword">typename</span> <span class="token class-name">KeyEqual</span> <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span>equal_to<span class="token operator">&lt;</span>KeyType<span class="token operator">></span><span class="token punctuation">,</span>
+    <span class="token keyword">typename</span> <span class="token class-name">Allocator</span> <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span>allocator<span class="token operator">&lt;</span><span class="token keyword">uint8_t</span><span class="token operator">></span><span class="token punctuation">,</span>
+    <span class="token keyword">uint8_t</span> ShardBits <span class="token operator">=</span> <span class="token number">8</span><span class="token punctuation">,</span>   <span class="token comment">// 分片位数</span>
+    <span class="token keyword">typename</span> <span class="token class-name">BucketT</span> <span class="token operator">=</span> folly<span class="token double-colon punctuation">::</span>MicroLock<span class="token punctuation">,</span>
+    <span class="token keyword">bool</span> ApplyPriority <span class="token operator">=</span> <span class="token boolean">false</span>
+<span class="token operator">></span>
+<span class="token keyword">class</span> <span class="token class-name">ConcurrentHashMap</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>关键参数：</p>
+<ul>
+<li><strong>ShardBits</strong>：控制分片数量，默认 8，即 256 个 Segment</li>
+<li><strong>BucketT</strong>：每个 bucket 的锁类型，默认用 <code>MicroLock</code>（4 字节自旋锁）</li>
+</ul>
+<h2 id="分片锁（Sharded-Locking）设计"><a href="#分片锁（Sharded-Locking）设计" class="headerlink" title="分片锁（Sharded Locking）设计"></a>分片锁（Sharded Locking）设计</h2><p>这是 ConcurrentHashMap 最核心的设计思想。</p>
+<pre class="line-numbers language-none"><code class="language-none">┌─────────────────────────┐
+│   ConcurrentHashMap     │
+│                         │
+│  Segment[0]             │
+│    ┌─────────────────┐  │
+│    │ Bucket[0]  lock │  │
+│    │ Bucket[1]  lock │  │
+│    │ Bucket[2]  lock │  │
+│    │      ...        │  │
+│    └─────────────────┘  │
+│  Segment[1]             │
+│    ┌─────────────────┐  │
+│    │ Bucket[0]  lock │  │
+│    │ Bucket[1]  lock │  │
+│    │      ...        │  │
+│    └─────────────────┘  │
+│  Segment[2..255]        │
+└─────────────────────────┘<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>设计要点：</p>
+<ol>
+<li><strong>两级分片</strong>：ShardBits 决定 Segment 数量，每个 Segment 内再分 Bucket</li>
+<li><strong>默认 256 个 Segment</strong>：哈希值的高 ShardBits 位决定落到哪个 Segment，低位决定 Bucket</li>
+<li><strong>每 Bucket 一把锁</strong>：锁粒度细到 bucket 级别，最大程度减少竞争</li>
+<li><strong>MicroLock</strong>：仅 4 字节的自旋锁，嵌入在 bucket 结构中，零额外内存开销</li>
+</ol>
+<h2 id="哈希值的使用"><a href="#哈希值的使用" class="headerlink" title="哈希值的使用"></a>哈希值的使用</h2><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">hash_value <span class="token operator">=</span> <span class="token function">Hash</span><span class="token punctuation">(</span>key<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 高 ShardBits 位 → Segment 索引</span>
+segment_idx <span class="token operator">=</span> hash_value <span class="token operator">>></span> <span class="token punctuation">(</span><span class="token number">64</span> <span class="token operator">-</span> ShardBits<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 剩余低位 → Bucket 索引（取模 Segment 内 bucket 数）</span>
+bucket_idx  <span class="token operator">=</span> lower_bits <span class="token operator">%</span> num_buckets_per_segment<span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>这样设计的好处是：同一个 Segment 内的 bucket 有相似的高位哈希值，理论上会竞争同一把 Segment 级别的资源，但实际的锁粒度在 Bucket 级，避免了热点。</p>
+<h2 id="并发操作实现"><a href="#并发操作实现" class="headerlink" title="并发操作实现"></a>并发操作实现</h2><h3 id="读取（find）"><a href="#读取（find）" class="headerlink" title="读取（find）"></a>读取（find）</h3><p><strong>读取完全无等待（wait-free）</strong>，不获取任何锁：</p>
+<ol>
+<li>哈希定位到 Segment + Bucket</li>
+<li>遍历 bucket 链表，原子读取节点</li>
+<li>通过 hazard pointer 保护正在读取的节点不被回收</li>
+</ol>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 伪代码：读取路径</span>
+<span class="token keyword">auto</span> result <span class="token operator">=</span> <span class="token function">find</span><span class="token punctuation">(</span>key<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 1. 计算 hash</span>
+<span class="token comment">// 2. 定位 segment[bucket_idx]</span>
+<span class="token comment">// 3. 遍历链表，原子读每个节点的 key</span>
+<span class="token comment">// 4. 匹配成功 → 返回值或引用</span>
+<span class="token comment">// 5. 匹配失败 → 返回 end()</span>
+<span class="token comment">// 全程无锁！</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>读取路径不使用锁的关键在于 <strong>hazard pointer</strong>：读线程将正在访问的节点指针发布到 hazard pointer 列表，删除线程在回收节点前检查 hazard pointer，确保不会释放正在被读的节点。</p>
+<h3 id="插入（insert-insert-or-assign）"><a href="#插入（insert-insert-or-assign）" class="headerlink" title="插入（insert &#x2F; insert_or_assign）"></a>插入（insert &#x2F; insert_or_assign）</h3><p>插入需要获取 <strong>bucket 级别的锁</strong>：</p>
+<ol>
+<li>哈希定位到 Segment + Bucket</li>
+<li>获取该 Bucket 的 MicroLock</li>
+<li>遍历链表查找 key<ul>
+<li>存在 → 更新 value（insert_or_assign 模式）</li>
+<li>不存在 → 创建新节点插入链表头部</li>
+</ul>
+</li>
+<li>释放锁</li>
+</ol>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 伪代码：插入路径</span>
+<span class="token keyword">auto</span> result <span class="token operator">=</span> <span class="token function">insert</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> value<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 1. 计算 hash，定位 bucket</span>
+<span class="token comment">// 2. lock(bucket.microLock)</span>
+<span class="token comment">// 3. 遍历链表，查找 key</span>
+<span class="token comment">// 4. 如果存在 → 返回 &#123;iterator, false&#125;</span>
+<span class="token comment">// 5. 如果不存在 → new Node&#123;key, value&#125;，插入链表头</span>
+<span class="token comment">// 6. unlock(bucket.microLock)</span>
+<span class="token comment">// 7. 返回 &#123;iterator, true&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="删除（erase）"><a href="#删除（erase）" class="headerlink" title="删除（erase）"></a>删除（erase）</h3><p>同样获取 bucket 锁，但涉及 hazard pointer 安全回收：</p>
+<ol>
+<li>定位 Bucket，获取锁</li>
+<li>遍历链表找到目标节点</li>
+<li>从链表中摘除节点</li>
+<li>释放锁</li>
+<li>将节点放入 retire 列表（延迟回收）</li>
+<li>当确定没有读线程持有该节点的 hazard pointer 时，安全释放内存</li>
+</ol>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 伪代码：删除路径</span>
+<span class="token keyword">auto</span> result <span class="token operator">=</span> <span class="token function">erase</span><span class="token punctuation">(</span>key<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 1. 定位 bucket，lock</span>
+<span class="token comment">// 2. 找到节点，从链表摘除</span>
+<span class="token comment">// 3. unlock</span>
+<span class="token comment">// 4. retire(node)  // 加入待回收列表</span>
+<span class="token comment">// 5. reclaim()      // 检查 hazard pointers，安全释放</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="assign-if-equal（原子条件更新）"><a href="#assign-if-equal（原子条件更新）" class="headerlink" title="assign_if_equal（原子条件更新）"></a>assign_if_equal（原子条件更新）</h3><p>这是 ConcurrentHashMap 的独特方法，允许<strong>原子地</strong>进行”如果当前值等于期望值，则更新为新值”：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 如果 map[key] == expected，则 map[key] = desired</span>
+<span class="token comment">// 整个操作在锁保护下原子完成</span>
+<span class="token keyword">auto</span> result <span class="token operator">=</span> map<span class="token punctuation">.</span><span class="token function">assign_if_equal</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> expected<span class="token punctuation">,</span> desired<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>这在需要 CAS 语义的并发场景中非常实用，比如：</p>
+<ul>
+<li>状态机的原子状态转换</li>
+<li>引用计数的线程安全更新</li>
+</ul>
+<h2 id="Hazard-Pointer-内存回收"><a href="#Hazard-Pointer-内存回收" class="headerlink" title="Hazard Pointer 内存回收"></a>Hazard Pointer 内存回收</h2><p>传统并发哈希表的一个痛点：删除节点时，可能有读线程正在访问该节点。直接删除会导致 use-after-free。</p>
+<p>ConcurrentHashMap 使用 <strong>hazard pointer</strong> 解决：</p>
+<pre class="line-numbers language-none"><code class="language-none">读线程                           删除线程
+────────                        ────────
+读取节点 A                      删除节点 A
+↓                               ↓
+hazptr.protect(&amp;A)             从链表摘除 A
+↓                               ↓
+读取 A 的数据...                  retire(A) → 放入退休列表
+↓                               ↓
+hazptr.clear()                  扫描所有读线程的 hazard pointer
+                                ↓
+                                如果 A 不在任何 hazptr 中
+                                ↓
+                                delete A<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>关键点：</p>
+<ul>
+<li>读线程通过 hazard pointer 声明”我正在用这个节点”</li>
+<li>删除线程等待所有对节点的引用消失后才真正释放</li>
+<li>实现了安全的、无锁的读路径</li>
+</ul>
+<h1 id="AtomicHashMap-架构"><a href="#AtomicHashMap-架构" class="headerlink" title="AtomicHashMap 架构"></a>AtomicHashMap 架构</h1><p>AtomicHashMap 是 Folly 中另一种并发哈希表的实现，采用完全不同的设计哲学。</p>
+<h2 id="核心设计"><a href="#核心设计" class="headerlink" title="核心设计"></a>核心设计</h2><p>AtomicHashMap 由多个 <strong>AtomicHashArray (AHA)</strong> 子表串联而成：</p>
+<ul>
+<li>初始只有一个 AHA</li>
+<li>填满后追加新的 AHA，形成子表链表</li>
+<li><strong>元素永不移动</strong>：扩容通过追加而非 rehash</li>
+</ul>
+<pre class="line-numbers language-none"><code class="language-none">┌─────────────────┐     ┌─────────────────┐
+│ AtomicHashArray │ →──→│ AtomicHashArray │ →──→ ...
+│    (Submap 0)   │     │    (Submap 1)   │
+│  [slot0]        │     │  [slot0]        │
+│  [slot1]        │     │  [slot1]        │
+│  ...            │     │  ...            │
+└─────────────────┘     └─────────────────┘<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="AHA：开放寻址-CAS"><a href="#AHA：开放寻址-CAS" class="headerlink" title="AHA：开放寻址 + CAS"></a>AHA：开放寻址 + CAS</h2><p>每个 AHA 是固定大小的开放寻址哈希表，核心操作都用 CAS 原子完成：</p>
+<p><strong>插入</strong>：</p>
+<ol>
+<li>哈希取模定位到 slot</li>
+<li>CAS 将 slot 的 key 从 EMPTY 改为 LOCKED（特殊的哨兵值）</li>
+<li>CAS 成功 → 写入 value → 将 key 从 LOCKED 改为真实 key（解锁）</li>
+<li>CAS 失败 → 线性探测下一个 slot</li>
+</ol>
+<p><strong>查找</strong>（无锁）：</p>
+<ol>
+<li>哈希定位 + 线性探测</li>
+<li>读取 slot key，比较匹配 &#x2F; 空 &#x2F; 继续探测</li>
+<li>完全无等待，因为元素始终处于有效状态</li>
+</ol>
+<p><strong>删除</strong>：</p>
+<ol>
+<li>找到 slot</li>
+<li>CAS 将 key 改为 ERASED（墓碑值）</li>
+<li><strong>墓碑永不回收</strong>，这是该设计的最大代价</li>
+</ol>
+<h2 id="限制"><a href="#限制" class="headerlink" title="限制"></a>限制</h2><table>
+<thead>
+<tr>
+<th>特性</th>
+<th align="center">AtomicHashMap</th>
+<th align="center">ConcurrentHashMap</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>键类型</td>
+<td align="center">仅 int32&#x2F;int64</td>
+<td align="center">任意类型</td>
+</tr>
+<tr>
+<td>删除后内存回收</td>
+<td align="center">永不回收（墓碑）</td>
+<td align="center">Hazard Pointer 回收</td>
+</tr>
+<tr>
+<td>扩容方式</td>
+<td align="center">追加子表（性能递减）</td>
+<td align="center">可重新分配</td>
+</tr>
+<tr>
+<td>读并发</td>
+<td align="center">Wait-free</td>
+<td align="center">Wait-free</td>
+</tr>
+<tr>
+<td>写并发</td>
+<td align="center">Key 级 CAS</td>
+<td align="center">Bucket 级锁</td>
+</tr>
+<tr>
+<td>迭代器稳定性</td>
+<td align="center">永远有效</td>
+<td align="center">Hazard Pointer 保证</td>
+</tr>
+</tbody></table>
+<h2 id="为什么-AtomicHashMap-更快（特定场景）"><a href="#为什么-AtomicHashMap-更快（特定场景）" class="headerlink" title="为什么 AtomicHashMap 更快（特定场景）"></a>为什么 AtomicHashMap 更快（特定场景）</h2><ul>
+<li>读路径无需任何原子指令，直接内存读取</li>
+<li>写路径仅 CAS，无锁开销</li>
+<li>无内存分配&#x2F;释放（墓碑机制）</li>
+<li>适合<strong>键不删除</strong>或<strong>删除很少</strong>的场景</li>
+</ul>
+<h1 id="性能对比"><a href="#性能对比" class="headerlink" title="性能对比"></a>性能对比</h1><p>以下是 8 线程、100 万条目的基准对比：</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th align="center">ConcurrentHashMap</th>
+<th align="center">AtomicHashMap</th>
+<th align="center">tbb::concurrent_hash_map</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>插入（50% 负载）</td>
+<td align="center">—</td>
+<td align="center">0.19 μs</td>
+<td align="center">~0.5 μs</td>
+</tr>
+<tr>
+<td>查找（50% 负载）</td>
+<td align="center">—</td>
+<td align="center">0.05 μs</td>
+<td align="center">~0.15 μs</td>
+</tr>
+<tr>
+<td>读并发</td>
+<td align="center">Wait-free</td>
+<td align="center">Wait-free</td>
+<td align="center">有锁</td>
+</tr>
+</tbody></table>
+<p>AtomicHashMap 比 tbb::concurrent_hash_map 快 2-5 倍。</p>
+<h1 id="使用建议"><a href="#使用建议" class="headerlink" title="使用建议"></a>使用建议</h1><p><strong>选 ConcurrentHashMap 的场景</strong>：</p>
+<ul>
+<li>键类型不是整数</li>
+<li>需要频繁增删</li>
+<li>需要 <code>assign_if_equal</code> 原子条件更新</li>
+<li>需要类似 <code>std::unordered_map</code> 的接口</li>
+</ul>
+<p><strong>选 AtomicHashMap 的场景</strong>：</p>
+<ul>
+<li>键是 32&#x2F;64 位整数</li>
+<li>删除极少或从不删除</li>
+<li>对读&#x2F;写延迟要求极高的场景</li>
+<li>能接受固定的哨兵键值（EMPTY、LOCKED、ERASED）</li>
+</ul>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>Folly 的两套并发哈希表体现了两种经典的并发设计思路：</p>
+<ul>
+<li><strong>ConcurrentHashMap</strong>：分片锁 + hazard pointer，通用性强，适合大多数场景</li>
+<li><strong>AtomicHashMap</strong>：CAS + 开放寻址 + 追加子表，极致性能，适用于特定约束场景</li>
+</ul>
+<p>共同的设计精髓是 <strong>读路径无锁</strong>：通过精心设计的并发协议（hazard pointer &#x2F; 原子状态机），让最频繁的读操作完全不阻塞，从而在高并发下获得近乎线性的扩展性。</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/c/" rel="tag"># c++</a>
+              <a href="/tags/folly/" rel="tag"># folly</a>
+              <a href="/tags/concurrent-hashmap/" rel="tag"># concurrent-hashmap</a>
+              <a href="/tags/%E5%B9%B6%E5%8F%91%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/" rel="tag"># 并发数据结构</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/b971a5d0.html" rel="prev" title="谈一谈并发队列的实现">
+                  <i class="fa fa-angle-left"></i> 谈一谈并发队列的实现
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/589c6abb.html" rel="next" title="生产环境使用boost::fiber">
+                  生产环境使用boost::fiber <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

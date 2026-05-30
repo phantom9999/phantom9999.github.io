@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="详细介绍 Boost.Asio 异步网络库的架构设计、核心概念、并发模型及 C++20 协程用法。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Boost.Asio 异步网络编程详解">
+<meta property="og:url" content="https://phantom9999.github.io/posts/9d5b3554.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="详细介绍 Boost.Asio 异步网络库的架构设计、核心概念、并发模型及 C++20 协程用法。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-25T23:30:00.000Z">
+<meta property="article:modified_time" content="2026-05-25T23:30:00.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="asio">
+<meta property="article:tag" content="boost">
+<meta property="article:tag" content="协程">
+<meta property="article:tag" content="异步编程">
+<meta property="article:tag" content="网络编程">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/9d5b3554.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/9d5b3554.html","path":"posts/9d5b3554.html","title":"Boost.Asio 异步网络编程详解"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Boost.Asio 异步网络编程详解 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">核心架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Proactor-%E6%A8%A1%E5%BC%8F"><span class="nav-number">2.1.</span> <span class="nav-text">Proactor 模式</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%B9%B3%E5%8F%B0%E5%AE%9E%E7%8E%B0%E5%B7%AE%E5%BC%82"><span class="nav-number">2.1.1.</span> <span class="nav-text">平台实现差异</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#io-context%EF%BC%9A%E8%B0%83%E5%BA%A6%E5%BF%83%E8%84%8F"><span class="nav-number">2.2.</span> <span class="nav-text">io_context：调度心脏</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%98%B2%E6%AD%A2-run-%E8%BF%87%E6%97%A9%E9%80%80%E5%87%BA"><span class="nav-number">2.2.1.</span> <span class="nav-text">防止 run() 过早退出</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BC%82%E6%AD%A5%E6%93%8D%E4%BD%9C%E7%9A%84%E5%AE%8C%E6%95%B4%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F"><span class="nav-number">2.3.</span> <span class="nav-text">异步操作的完整生命周期</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E7%BB%84%E4%BB%B6"><span class="nav-number">3.</span> <span class="nav-text">核心组件</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#I-O-%E5%AF%B9%E8%B1%A1"><span class="nav-number">3.1.</span> <span class="nav-text">I&#x2F;O 对象</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BC%93%E5%86%B2%E5%8C%BA"><span class="nav-number">3.2.</span> <span class="nav-text">缓冲区</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9A%E6%97%B6%E5%99%A8"><span class="nav-number">3.3.</span> <span class="nav-text">定时器</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%A7%A3%E6%9E%90%E5%99%A8"><span class="nav-number">3.4.</span> <span class="nav-text">解析器</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%B9%B6%E5%8F%91%E6%A8%A1%E5%9E%8B"><span class="nav-number">4.</span> <span class="nav-text">并发模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%A4%9A%E7%BA%BF%E7%A8%8B%E8%BF%90%E8%A1%8C-io-context"><span class="nav-number">4.1.</span> <span class="nav-text">多线程运行 io_context</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Strand"><span class="nav-number">4.2.</span> <span class="nav-text">Strand</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-20-%E5%8D%8F%E7%A8%8B%E6%94%AF%E6%8C%81"><span class="nav-number">5.</span> <span class="nav-text">C++20 协程支持</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9F%BA%E7%A1%80%E7%94%A8%E6%B3%95"><span class="nav-number">5.1.</span> <span class="nav-text">基础用法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%94%99%E8%AF%AF%E7%A0%81%E9%A3%8E%E6%A0%BC-vs-%E5%BC%82%E5%B8%B8%E9%A3%8E%E6%A0%BC"><span class="nav-number">5.2.</span> <span class="nav-text">错误码风格 vs 异常风格</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B9%B6%E5%8F%91%E7%AD%89%E5%BE%85%EF%BC%9A-%E5%92%8C-%E8%BF%90%E7%AE%97%E7%AC%A6"><span class="nav-number">5.3.</span> <span class="nav-text">并发等待：&amp;&amp; 和 || 运算符</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#use-awaitable-vs-deferred"><span class="nav-number">5.4.</span> <span class="nav-text">use_awaitable vs deferred</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E8%A6%81%E7%82%B9"><span class="nav-number">6.</span> <span class="nav-text">关键要点</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E4%BD%BF%E7%94%A8-shared-ptr-%E7%AE%A1%E7%90%86%E8%BF%9E%E6%8E%A5%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F"><span class="nav-number">6.1.</span> <span class="nav-text">1. 使用 shared_ptr 管理连接生命周期</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-%E6%B3%A8%E6%84%8F%E7%BC%93%E5%86%B2%E5%8C%BA%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F"><span class="nav-number">6.2.</span> <span class="nav-text">2. 注意缓冲区生命周期</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Strand-%E6%AF%94-Mutex-%E6%9B%B4%E9%80%82%E5%90%88-Asio"><span class="nav-number">6.3.</span> <span class="nav-text">3. Strand 比 Mutex 更适合 Asio</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-%E9%81%BF%E5%85%8D%E5%9C%A8-handler-%E4%B8%AD%E9%98%BB%E5%A1%9E"><span class="nav-number">6.4.</span> <span class="nav-text">4. 避免在 handler 中阻塞</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-%E4%BC%98%E5%85%88%E4%BD%BF%E7%94%A8%E5%8D%8F%E7%A8%8B"><span class="nav-number">6.5.</span> <span class="nav-text">5. 优先使用协程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-%E7%8B%AC%E7%AB%8B%E7%89%88%E6%9C%AC-vs-Boost-%E7%89%88%E6%9C%AC%E7%9A%84%E9%80%89%E6%8B%A9"><span class="nav-number">6.6.</span> <span class="nav-text">6. 独立版本 vs Boost 版本的选择</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">7.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%8F%82%E8%80%83"><span class="nav-number">8.</span> <span class="nav-text">参考</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/9d5b3554.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Boost.Asio 异步网络编程详解 | phantom9999的博客">
+      <meta itemprop="description" content="详细介绍 Boost.Asio 异步网络库的架构设计、核心概念、并发模型及 C++20 协程用法。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Boost.Asio 异步网络编程详解
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2026-05-25 23:30:00" itemprop="dateCreated datePublished" datetime="2026-05-25T23:30:00+00:00">2026-05-25</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/cpp-devel/" itemprop="url" rel="index"><span itemprop="name">cpp-devel</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">详细介绍 Boost.Asio 异步网络库的架构设计、核心概念、并发模型及 C++20 协程用法。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>Boost.Asio 是一个跨平台的 C++ 异步 I&#x2F;O 库，提供了统一的同步和异步编程模型，支持网络通信、定时器、信号处理、串口通信等。Asio 的设计非常成熟——它曾是 Boost 的一部分，现已被采纳为 C++ 标准提案（C++23 引入 <code>&lt;networking&gt;</code> 库，但目前投票未通过并被搁置，ASIO 的独立版本仍在继续演进）。</p>
+<p>Asio 的核心优势在于：<strong>用同一套 API 跨越 Windows（IOCP）、Linux（epoll &#x2F; io_uring）、macOS&#x2F;BSD（kqueue）等平台</strong>，底层自动选择最优的 I&#x2F;O 多路复用机制。截至 2025 年，Asio 已全面支持 C++20 协程，使得异步代码可以用同步风格编写，大幅降低了异步编程的复杂度。</p>
+<p>Asio 目前由 C++ 标准委员会成员 Christopher Kohlhoff 独立维护，有 Boost 版本（<code>boost::asio</code>）和独立版本（<code>asio::</code>，header-only），两者 API 几乎一致。</p>
+<h1 id="核心架构"><a href="#核心架构" class="headerlink" title="核心架构"></a>核心架构</h1><h2 id="Proactor-模式"><a href="#Proactor-模式" class="headerlink" title="Proactor 模式"></a>Proactor 模式</h2><p>Asio 的异步模型基于 <strong>Proactor 设计模式</strong>（与 Reactor 相对）。理解这两种模式的区别是理解 Asio 的关键：</p>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>监控什么</th>
+<th>谁执行 I&#x2F;O</th>
+<th>通知什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Reactor</strong></td>
+<td>套接字「可读&#x2F;可写」就绪</td>
+<td>用户代码读写</td>
+<td>“你可以读了”</td>
+</tr>
+<tr>
+<td><strong>Proactor</strong></td>
+<td>I&#x2F;O 操作完成</td>
+<td>OS&#x2F;内核代为执行</td>
+<td>“数据已读到你的缓冲区”</td>
+</tr>
+</tbody></table>
+<p>在 Proactor 模式中，你发起一个异步操作并提交缓冲区，OS 在后台执行实际的 I&#x2F;O，完成后通知你。整个过程用户线程<strong>不会因 I&#x2F;O 阻塞</strong>。</p>
+<h3 id="平台实现差异"><a href="#平台实现差异" class="headerlink" title="平台实现差异"></a>平台实现差异</h3><ul>
+<li><strong>Windows</strong>：使用 IOCP（I&#x2F;O Completion Ports）——操作系统级别的真正 Proactor</li>
+<li><strong>Linux（epoll 路径）</strong>：用 epoll 模拟 Proactor——epoll 检测到套接字就绪后，Asio 内部同步执行 I&#x2F;O，再将完成处理器入队</li>
+<li><strong>Linux（io_uring 路径）</strong>：较新版本（Boost 1.78+）支持 io_uring，提供了类似 Windows IOCP 的真正的 Proactor 路径</li>
+</ul>
+<p>无论底层用什么机制，上层 API 完全一致，这也是 Asio 最核心的价值。</p>
+<h2 id="io-context：调度心脏"><a href="#io-context：调度心脏" class="headerlink" title="io_context：调度心脏"></a>io_context：调度心脏</h2><p><code>io_context</code>（旧称 <code>io_service</code>）是 Asio 的核心执行引擎，承担多重角色：</p>
+<ul>
+<li><strong>I&#x2F;O 多路复用器</strong>：封装 epoll &#x2F; IOCP &#x2F; kqueue，等待 OS 事件通知</li>
+<li><strong>任务队列</strong>：维护待执行的完成处理器（completion handler）队列</li>
+<li><strong>定时器调度</strong>：基于堆的定时器管理</li>
+<li><strong>通用执行上下文</strong>：不止用于 I&#x2F;O，任何可投递的任务（通过 <code>post</code> &#x2F; <code>dispatch</code> &#x2F; <code>defer</code>）都可以在这里执行</li>
+</ul>
+<p>关键方法：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>run()</code></td>
+<td>阻塞运行事件循环，直到没有待处理的处理器</td>
+</tr>
+<tr>
+<td><code>poll()</code></td>
+<td>执行所有就绪的处理器，不阻塞，立即返回</td>
+</tr>
+<tr>
+<td><code>run_one()</code></td>
+<td>阻塞执行最多一个处理器</td>
+</tr>
+<tr>
+<td><code>stop()</code></td>
+<td>停止事件循环</td>
+</tr>
+<tr>
+<td><code>restart()</code></td>
+<td>重置 <code>stopped</code> 状态，使 <code>run()</code> 可再次调用</td>
+</tr>
+</tbody></table>
+<h3 id="防止-run-过早退出"><a href="#防止-run-过早退出" class="headerlink" title="防止 run() 过早退出"></a>防止 run() 过早退出</h3><p>当没有待处理的异步操作时，<code>run()</code> 会返回。为了防止事件循环过早退出，使用 <code>executor_work_guard</code>（旧称 <code>io_context::work</code>）：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 即使没有 I/O 操作，run() 也会阻塞等待</span>
+<span class="token keyword">auto</span> work <span class="token operator">=</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">make_work_guard</span><span class="token punctuation">(</span>io_ctx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+io_ctx<span class="token punctuation">.</span><span class="token function">run</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 不会返回，直到 work 被 reset</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="异步操作的完整生命周期"><a href="#异步操作的完整生命周期" class="headerlink" title="异步操作的完整生命周期"></a>异步操作的完整生命周期</h2><p>以一次 <code>async_read</code> 为例，跟踪完整链路：</p>
+<pre class="line-numbers language-none"><code class="language-none">1. 发起操作
+   async_read(socket, buffer, handler)
+   ↓
+2. 向 OS 注册
+   epoll_ctl(EPOLLIN) &#x2F; WSARecv + IOCP
+   ↓
+3. 用户线程立即返回（无阻塞）
+   ↓
+4. OS 通知数据就绪 &#x2F; I&#x2F;O 完成
+   ↓
+5. Asio 将 handler 放入 io_context 的任务队列
+   ↓
+6. run() 取出 handler 并执行<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>理解这个流程的关键在于：<strong>异步操作不是”在另一个线程执行”，而是”交给 OS 执行，完成后再通知你”</strong>。因此你可以用单线程驱动成千上万个连接。</p>
+<h1 id="核心组件"><a href="#核心组件" class="headerlink" title="核心组件"></a>核心组件</h1><h2 id="I-O-对象"><a href="#I-O-对象" class="headerlink" title="I&#x2F;O 对象"></a>I&#x2F;O 对象</h2><p>Asio 提供了丰富的 I&#x2F;O 对象，每个都同时支持同步和异步操作：</p>
+<table>
+<thead>
+<tr>
+<th>I&#x2F;O 对象</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ip::tcp::socket</code></td>
+<td>TCP 套接字</td>
+</tr>
+<tr>
+<td><code>ip::tcp::acceptor</code></td>
+<td>TCP 服务端监听器</td>
+</tr>
+<tr>
+<td><code>ip::udp::socket</code></td>
+<td>UDP 套接字</td>
+</tr>
+<tr>
+<td><code>steady_timer</code></td>
+<td>单调时钟定时器</td>
+</tr>
+<tr>
+<td><code>system_timer</code></td>
+<td>系统时钟定时器</td>
+</tr>
+<tr>
+<td><code>serial_port</code></td>
+<td>串口通信</td>
+</tr>
+<tr>
+<td><code>signal_set</code></td>
+<td>POSIX 信号处理</td>
+</tr>
+<tr>
+<td><code>local::stream_protocol::socket</code></td>
+<td>Unix Domain Socket</td>
+</tr>
+</tbody></table>
+<p>同步 vs 异步示例：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 同步读取 — 阻塞当前线程</span>
+std<span class="token double-colon punctuation">::</span>size_t n <span class="token operator">=</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">read</span><span class="token punctuation">(</span>socket<span class="token punctuation">,</span> buffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 异步读取 — 发起后立即返回，完成时调用 handler</span>
+boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">async_read</span><span class="token punctuation">(</span>socket<span class="token punctuation">,</span> buffer<span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">(</span>error_code ec<span class="token punctuation">,</span> std<span class="token double-colon punctuation">::</span>size_t n<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 处理读取结果</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="缓冲区"><a href="#缓冲区" class="headerlink" title="缓冲区"></a>缓冲区</h2><p>Asio 的缓冲区是<strong>非拥有型</strong>的内存视图，避免无谓的数据拷贝：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// const_buffer — 只读视图</span>
+<span class="token comment">// mutable_buffer — 可写视图</span>
+<span class="token comment">// asio::buffer() — 工厂函数，自动推导类型</span>
+
+std<span class="token double-colon punctuation">::</span>string request<span class="token punctuation">;</span>
+<span class="token keyword">char</span> buf<span class="token punctuation">[</span><span class="token number">1024</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span><span class="token keyword">char</span><span class="token operator">></span> <span class="token function">data</span><span class="token punctuation">(</span><span class="token number">4096</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">async_read</span><span class="token punctuation">(</span>socket<span class="token punctuation">,</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">buffer</span><span class="token punctuation">(</span>buf<span class="token punctuation">)</span><span class="token punctuation">,</span> handler<span class="token punctuation">)</span><span class="token punctuation">;</span>
+boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">async_read</span><span class="token punctuation">(</span>socket<span class="token punctuation">,</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">buffer</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">,</span> handler<span class="token punctuation">)</span><span class="token punctuation">;</span>
+boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">async_read</span><span class="token punctuation">(</span>socket<span class="token punctuation">,</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">dynamic_buffer</span><span class="token punctuation">(</span>request<span class="token punctuation">)</span><span class="token punctuation">,</span> handler<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>重要规则</strong>：异步操作期间，缓冲区必须保持有效。因为 Proactor 模式中，OS 可能直接向你的缓冲区写入数据（Windows IOCP 就是如此）。最常见的模式是用 <code>shared_ptr</code> 保持缓冲区生命周期：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">auto</span> buf <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>std<span class="token double-colon punctuation">::</span>string<span class="token operator">></span></span></span><span class="token punctuation">(</span><span class="token string">"hello"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">async_write</span><span class="token punctuation">(</span>socket<span class="token punctuation">,</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">buffer</span><span class="token punctuation">(</span><span class="token operator">*</span>buf<span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token punctuation">[</span>buf<span class="token punctuation">]</span><span class="token punctuation">(</span>error_code ec<span class="token punctuation">,</span> std<span class="token double-colon punctuation">::</span>size_t n<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// buf 通过 shared_ptr 捕获，保持生命周期</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="定时器"><a href="#定时器" class="headerlink" title="定时器"></a>定时器</h2><p><code>steady_timer</code> 基于单调时钟，不受系统时间调整影响：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>steady_timer <span class="token function">timer</span><span class="token punctuation">(</span>io_ctx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 同步等待</span>
+timer<span class="token punctuation">.</span><span class="token function">expires_after</span><span class="token punctuation">(</span>std<span class="token double-colon punctuation">::</span>chrono<span class="token double-colon punctuation">::</span><span class="token function">seconds</span><span class="token punctuation">(</span><span class="token number">5</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+timer<span class="token punctuation">.</span><span class="token function">wait</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 阻塞 5 秒</span>
+
+<span class="token comment">// 异步等待</span>
+timer<span class="token punctuation">.</span><span class="token function">async_wait</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">(</span>error_code ec<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>ec<span class="token punctuation">)</span> std<span class="token double-colon punctuation">::</span>cout <span class="token operator">&lt;&lt;</span> <span class="token string">"timer fired\n"</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>steady_timer::expires_after()</code> 每次都重新设置过期时间，而 <code>expires_at()</code> 设置绝对时间点。异步定时器是 Asio 中实现超时控制的基础。</p>
+<h2 id="解析器"><a href="#解析器" class="headerlink" title="解析器"></a>解析器</h2><p><code>ip::tcp::resolver</code> 将域名解析为端点列表（阻塞 DNS 查询通常在线程池中执行，避免阻塞事件循环）：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>ip<span class="token double-colon punctuation">::</span>tcp<span class="token double-colon punctuation">::</span>resolver <span class="token function">resolver</span><span class="token punctuation">(</span>io_ctx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">auto</span> endpoints <span class="token operator">=</span> resolver<span class="token punctuation">.</span><span class="token function">resolve</span><span class="token punctuation">(</span><span class="token string">"www.example.com"</span><span class="token punctuation">,</span> <span class="token string">"80"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// endpoints 是一个迭代器，包含多个解析结果</span>
+
+boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">connect</span><span class="token punctuation">(</span>socket<span class="token punctuation">,</span> endpoints<span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 自动尝试直到连接成功</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="并发模型"><a href="#并发模型" class="headerlink" title="并发模型"></a>并发模型</h1><h2 id="多线程运行-io-context"><a href="#多线程运行-io-context" class="headerlink" title="多线程运行 io_context"></a>多线程运行 io_context</h2><p>多个线程同时调用同一个 <code>io_context::run()</code> 时，完成处理器会在这些线程间并发执行。Asio 保证处理器入队和出队是线程安全的：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>io_context io_ctx<span class="token punctuation">;</span>
+
+<span class="token comment">// 启动线程池</span>
+std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span>std<span class="token double-colon punctuation">::</span>thread<span class="token operator">></span> threads<span class="token punctuation">;</span>
+<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> std<span class="token double-colon punctuation">::</span>thread<span class="token double-colon punctuation">::</span><span class="token function">hardware_concurrency</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token operator">++</span>i<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    threads<span class="token punctuation">.</span><span class="token function">emplace_back</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token operator">&amp;</span>io_ctx<span class="token punctuation">]</span> <span class="token punctuation">&#123;</span> io_ctx<span class="token punctuation">.</span><span class="token function">run</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">auto</span><span class="token operator">&amp;</span> t <span class="token operator">:</span> threads<span class="token punctuation">)</span> t<span class="token punctuation">.</span><span class="token function">join</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>陷阱</strong>：多线程模式下，同一个 socket 的回调可能在不同线程中并发执行。对每个连接的状态访问需要同步保护。</p>
+<h2 id="Strand"><a href="#Strand" class="headerlink" title="Strand"></a>Strand</h2><p><code>strand</code> 是 Asio 提供的<strong>轻量级串行化机制</strong>——保证投递到同一个 strand 的处理器按 FIFO 顺序串行执行，无需显式加锁：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 方式一：创建 strand</span>
+<span class="token keyword">auto</span> strand <span class="token operator">=</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">make_strand</span><span class="token punctuation">(</span>io_ctx<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 方式二：通过 strand 投递</span>
+boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">post</span><span class="token punctuation">(</span>strand<span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token punctuation">&#123;</span> <span class="token comment">/* 独享连接状态 */</span> <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 方式三：bind_executor</span>
+<span class="token function">async_read</span><span class="token punctuation">(</span>socket<span class="token punctuation">,</span> buffer<span class="token punctuation">,</span>
+    boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">bind_executor</span><span class="token punctuation">(</span>strand<span class="token punctuation">,</span> handler<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>典型用法：为每个 TCP 连接分配一个 strand，这样同一连接的所有回调串行执行，不同连接之间则并行执行。这比每个连接一个 mutex 更高效，因为无需上下文切换和锁竞争。</p>
+<h1 id="C-20-协程支持"><a href="#C-20-协程支持" class="headerlink" title="C++20 协程支持"></a>C++20 协程支持</h1><p>C++20 协程是 Asio 近年最重大的变革。用 <code>co_await</code> 替代回调链，异步代码以同步风格书写，可读性和可维护性大幅提升。</p>
+<h2 id="基础用法"><a href="#基础用法" class="headerlink" title="基础用法"></a>基础用法</h2><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;boost/asio.hpp></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;boost/asio/co_spawn.hpp></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;boost/asio/use_awaitable.hpp></span></span>
+
+boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>awaitable<span class="token operator">&lt;</span><span class="token keyword">void</span><span class="token operator">></span> <span class="token function">echo</span><span class="token punctuation">(</span>tcp<span class="token double-colon punctuation">::</span>socket socket<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">try</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">char</span> data<span class="token punctuation">[</span><span class="token number">1024</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token punctuation">;</span><span class="token punctuation">;</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token comment">// 异步读取，co_await 挂起协程，不阻塞线程</span>
+            std<span class="token double-colon punctuation">::</span>size_t n <span class="token operator">=</span> <span class="token keyword">co_await</span> socket<span class="token punctuation">.</span><span class="token function">async_read_some</span><span class="token punctuation">(</span>
+                boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">buffer</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">,</span>
+                boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>use_awaitable<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+            <span class="token comment">// 异步写回</span>
+            <span class="token keyword">co_await</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">async_write</span><span class="token punctuation">(</span>
+                socket<span class="token punctuation">,</span>
+                boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">buffer</span><span class="token punctuation">(</span>data<span class="token punctuation">,</span> n<span class="token punctuation">)</span><span class="token punctuation">,</span>
+                boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>use_awaitable<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">catch</span> <span class="token punctuation">(</span>std<span class="token double-colon punctuation">::</span>exception<span class="token operator">&amp;</span> e<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        std<span class="token double-colon punctuation">::</span>cerr <span class="token operator">&lt;&lt;</span> <span class="token string">"echo error: "</span> <span class="token operator">&lt;&lt;</span> e<span class="token punctuation">.</span><span class="token function">what</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;&lt;</span> <span class="token string">"\n"</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">int</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>io_context ctx<span class="token punctuation">;</span>
+    <span class="token comment">// ...</span>
+    boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">co_spawn</span><span class="token punctuation">(</span>
+        ctx<span class="token punctuation">.</span><span class="token function">get_executor</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token function">echo</span><span class="token punctuation">(</span>std<span class="token double-colon punctuation">::</span><span class="token function">move</span><span class="token punctuation">(</span>socket<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>detached  <span class="token comment">// 忽略协程结果</span>
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    ctx<span class="token punctuation">.</span><span class="token function">run</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>关键点：</p>
+<ul>
+<li>协程返回类型必须是 <code>boost::asio::awaitable&lt;T&gt;</code></li>
+<li>给 <code>async_*</code> 函数传入 <code>use_awaitable</code> 作为 Completion Token，使其返回 <code>awaitable</code></li>
+<li>用 <code>co_spawn</code> 启动协程，第一个参数是 executor，决定协程在哪个线程执行</li>
+<li>异常会被自动传播——<code>async_*</code> 的错误会以 <code>system_error</code> 形式抛到协程内部</li>
+</ul>
+<h2 id="错误码风格-vs-异常风格"><a href="#错误码风格-vs-异常风格" class="headerlink" title="错误码风格 vs 异常风格"></a>错误码风格 vs 异常风格</h2><p>使用 <code>as_tuple(use_awaitable)</code> 获取错误码而非异常：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">constexpr</span> <span class="token keyword">auto</span> tok <span class="token operator">=</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">as_tuple</span><span class="token punctuation">(</span>boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>use_awaitable<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>awaitable<span class="token operator">&lt;</span><span class="token keyword">void</span><span class="token operator">></span> <span class="token function">handle</span><span class="token punctuation">(</span>tcp<span class="token double-colon punctuation">::</span>socket<span class="token operator">&amp;</span> socket<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 返回 tuple&lt;error_code, size_t></span>
+    <span class="token keyword">auto</span> <span class="token punctuation">[</span>ec<span class="token punctuation">,</span> n<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token keyword">co_await</span> socket<span class="token punctuation">.</span><span class="token function">async_read_some</span><span class="token punctuation">(</span>
+        boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">buffer</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">,</span> tok<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>ec<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 处理错误，不抛异常</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>对于 <code>async_wait</code> 这类 handler 签名为 <code>void(error_code)</code> 的操作，<code>as_tuple</code> 解包后直接是 <code>error_code</code>：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">auto</span> <span class="token punctuation">[</span>ec<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token keyword">co_await</span> timer<span class="token punctuation">.</span><span class="token function">async_wait</span><span class="token punctuation">(</span>boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">as_tuple</span><span class="token punctuation">(</span>boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>use_awaitable<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<h2 id="并发等待：-和-运算符"><a href="#并发等待：-和-运算符" class="headerlink" title="并发等待：&amp;&amp; 和 || 运算符"></a>并发等待：&amp;&amp; 和 || 运算符</h2><p>需要 <code>#include &lt;boost/asio/experimental/awaitable_operators.hpp&gt;</code>。</p>
+<p><strong>&amp;&amp; — 等待所有操作完成</strong>：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">using</span> <span class="token keyword">namespace</span> boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span>experimental<span class="token double-colon punctuation">::</span>awaitable_operators<span class="token punctuation">;</span>
+<span class="token keyword">auto</span> <span class="token punctuation">[</span>n1<span class="token punctuation">,</span> n2<span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token keyword">co_await</span> <span class="token punctuation">(</span>
+    <span class="token function">async_read</span><span class="token punctuation">(</span>sock1<span class="token punctuation">,</span> buf1<span class="token punctuation">,</span> use_awaitable<span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span>
+    <span class="token function">async_read</span><span class="token punctuation">(</span>sock2<span class="token punctuation">,</span> buf2<span class="token punctuation">,</span> use_awaitable<span class="token punctuation">)</span>
+<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 两个读取都完成，结果打包为 tuple</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>若任一失败，另一个立即被取消。</p>
+<p><strong>|| — 等待任一操作完成（常用于超时）</strong>：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">std<span class="token double-colon punctuation">::</span>variant<span class="token operator">&lt;</span>std<span class="token double-colon punctuation">::</span>monostate<span class="token punctuation">,</span> std<span class="token double-colon punctuation">::</span>size_t<span class="token operator">></span> result <span class="token operator">=</span> <span class="token keyword">co_await</span> <span class="token punctuation">(</span>
+    timer<span class="token punctuation">.</span><span class="token function">async_wait</span><span class="token punctuation">(</span>use_awaitable<span class="token punctuation">)</span> <span class="token operator">||</span>     <span class="token comment">// index 0: 超时</span>
+    socket<span class="token punctuation">.</span><span class="token function">async_read_some</span><span class="token punctuation">(</span>buf<span class="token punctuation">,</span> use_awaitable<span class="token punctuation">)</span>  <span class="token comment">// index 1: 读取完成</span>
+<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token keyword">if</span> <span class="token punctuation">(</span>result<span class="token punctuation">.</span><span class="token function">index</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 超时处理</span>
+<span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">auto</span> n <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span><span class="token number">1</span><span class="token operator">></span></span></span><span class="token punctuation">(</span>result<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token comment">// 正常处理</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>这是实现带超时的异步操作的优雅方式。</p>
+<h2 id="use-awaitable-vs-deferred"><a href="#use-awaitable-vs-deferred" class="headerlink" title="use_awaitable vs deferred"></a>use_awaitable vs deferred</h2><p>两者都能与 <code>co_await</code> 配合，但有性能差异：</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>返回类型</th>
+<th>开销</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>use_awaitable</code></td>
+<td><code>awaitable&lt;T&gt;</code>（创建协程帧）</td>
+<td>较高</td>
+</tr>
+<tr>
+<td><code>deferred</code></td>
+<td>延迟函数对象（无额外协程帧）</td>
+<td>较低</td>
+</tr>
+</tbody></table>
+<p><code>deferred</code> 性能更好，<code>use_awaitable</code> 适合需要返回&#x2F;存储 <code>awaitable</code> 对象的场景。</p>
+<h1 id="关键要点"><a href="#关键要点" class="headerlink" title="关键要点"></a>关键要点</h1><h2 id="1-使用-shared-ptr-管理连接生命周期"><a href="#1-使用-shared-ptr-管理连接生命周期" class="headerlink" title="1. 使用 shared_ptr 管理连接生命周期"></a>1. 使用 shared_ptr 管理连接生命周期</h2><p>异步操作中，回调被执行时，发起该操作的「连接对象」必须仍然存活。最可靠的方式是让连接类继承 <code>enable_shared_from_this</code>，在发起异步操作时捕获 <code>shared_from_this()</code>：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">Session</span> <span class="token operator">:</span> <span class="token base-clause"><span class="token keyword">public</span> std<span class="token double-colon punctuation">::</span><span class="token class-name">enable_shared_from_this</span><span class="token operator">&lt;</span><span class="token class-name">Session</span><span class="token operator">></span></span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token keyword">void</span> <span class="token function">Start</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">auto</span> self <span class="token operator">=</span> <span class="token function">shared_from_this</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        socket_<span class="token punctuation">.</span><span class="token function">async_read_some</span><span class="token punctuation">(</span>boost<span class="token double-colon punctuation">::</span>asio<span class="token double-colon punctuation">::</span><span class="token function">buffer</span><span class="token punctuation">(</span>buf_<span class="token punctuation">)</span><span class="token punctuation">,</span>
+            <span class="token punctuation">[</span>self<span class="token punctuation">]</span><span class="token punctuation">(</span>error_code ec<span class="token punctuation">,</span> std<span class="token double-colon punctuation">::</span>size_t n<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+                self<span class="token operator">-></span><span class="token function">HandleRead</span><span class="token punctuation">(</span>ec<span class="token punctuation">,</span> n<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-注意缓冲区生命周期"><a href="#2-注意缓冲区生命周期" class="headerlink" title="2. 注意缓冲区生命周期"></a>2. 注意缓冲区生命周期</h2><p>异步操作完成前，缓冲区必须有效。不要使用栈上的临时缓冲区发起异步操作——当回调执行时，栈帧早已销毁。使用成员变量或堆分配的缓冲区。</p>
+<h2 id="3-Strand-比-Mutex-更适合-Asio"><a href="#3-Strand-比-Mutex-更适合-Asio" class="headerlink" title="3. Strand 比 Mutex 更适合 Asio"></a>3. Strand 比 Mutex 更适合 Asio</h2><p>对于每个连接的状态保护，用 strand 串行化回调比加 mutex 更好：无锁竞争、无上下文切换、与 Asio 的调度模型天然契合。</p>
+<h2 id="4-避免在-handler-中阻塞"><a href="#4-避免在-handler-中阻塞" class="headerlink" title="4. 避免在 handler 中阻塞"></a>4. 避免在 handler 中阻塞</h2><p>完成处理器应该快速返回。耗时操作（如磁盘 I&#x2F;O、同步 DNS 查询）应投递到线程池执行，避免阻塞事件循环。</p>
+<h2 id="5-优先使用协程"><a href="#5-优先使用协程" class="headerlink" title="5. 优先使用协程"></a>5. 优先使用协程</h2><p>如果编译器支持 C++20 协程，新代码优先用 <code>co_await</code> 而非回调链。协程消除了「回调地狱」，错误处理也更自然（try-catch 即可）。但要注意：协程帧的分配开销在某些场景可能成为瓶颈，需要实测。</p>
+<h2 id="6-独立版本-vs-Boost-版本的选择"><a href="#6-独立版本-vs-Boost-版本的选择" class="headerlink" title="6. 独立版本 vs Boost 版本的选择"></a>6. 独立版本 vs Boost 版本的选择</h2><ul>
+<li><strong><code>asio</code>（独立版）</strong>：header-only，零依赖，包含 <code>Makefile</code> 和 CMake 支持</li>
+<li><strong><code>boost::asio</code></strong>：作为 Boost 的一部分发布，依赖 Boost.System 等组件</li>
+</ul>
+<p>如果项目已使用 Boost，直接用 <code>boost::asio</code> 即可。如果追求最小依赖，选择独立版本更合适。两者的 API 命名空间不同，但接口几乎一致。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>Boost.Asio 是 C++ 异步编程的事实标准。它以 Proactor 模式为核心，通过统一的 API 屏蔽了 Windows IOCP、Linux epoll&#x2F;io_uring、BSD kqueue 等平台差异。<code>io_context</code> 作为调度中心，配合 strand、线程池提供灵活的并发模型，C++20 协程的引入更是从根本上改变了异步代码的编写方式。无论是开发高性能网络服务，还是需要异步定时器、信号处理、串口通信等场景，Asio 都是 C++ 生态中最成熟的选择。</p>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><ul>
+<li><span class="exturl" data-url="aHR0cDovL3RoaW5rLWFzeW5jLmNvbS9Bc2lvLw==">Asio 官方文档（独立版）<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly93d3cuYm9vc3Qub3JnL2RvYy9saWJzL3JlbGVhc2UvZG9jL2h0bWwvYm9vc3RfYXNpby5odG1s">Boost.Asio 文档<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly9tbW9hYXkuZ2l0Ym9va3MuaW8vYm9vc3QtYXNpby1jcHAtbmV0d29yay1wcm9ncmFtbWluZy1jaGluZXNlL2NvbnRlbnQv">Boost.Asio C++ 网络编程（中文）<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cDovL3RoaW5rLWFzeW5jLmNvbS9Bc2lvL2Jvb3N0X2FzaW9fMV8yMl8wL2RvYy9odG1sL2Jvb3N0X2FzaW8vb3ZlcnZpZXcvY29yZS9hc3luYy5odG1s">Asio Proactor 模式论文<i class="fa fa-external-link-alt"></i></span></li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/asio/" rel="tag"># asio</a>
+              <a href="/tags/boost/" rel="tag"># boost</a>
+              <a href="/tags/%E5%BC%82%E6%AD%A5%E7%BC%96%E7%A8%8B/" rel="tag"># 异步编程</a>
+              <a href="/tags/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B/" rel="tag"># 网络编程</a>
+              <a href="/tags/%E5%8D%8F%E7%A8%8B/" rel="tag"># 协程</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/8ee50b98.html" rel="prev" title="Google Abseil C++ 基础库详解">
+                  <i class="fa fa-angle-left"></i> Google Abseil C++ 基础库详解
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/e4420122.html" rel="next" title="bthread 底层实现深入分析">
+                  bthread 底层实现深入分析 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

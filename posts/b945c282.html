@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="简介本文介绍一些c++库的使用。 gflags">
+<meta property="og:type" content="article">
+<meta property="og:title" content="一些c++库的使用总结">
+<meta property="og:url" content="https://phantom9999.github.io/posts/b945c282.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="简介本文介绍一些c++库的使用。 gflags">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2020-05-04T20:06:10.000Z">
+<meta property="article:modified_time" content="2020-05-04T20:06:10.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="c++">
+<meta property="article:tag" content="lib">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/b945c282.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/b945c282.html","path":"posts/b945c282.html","title":"一些c++库的使用总结"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>一些c++库的使用总结 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#gflags"><span class="nav-number">2.</span> <span class="nav-text">gflags</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AE%80%E5%8D%95%E5%AE%9E%E7%94%A8"><span class="nav-number">2.1.</span> <span class="nav-text">简单实用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BC%96%E8%AF%91%E5%AE%9E%E7%94%A8"><span class="nav-number">2.2.</span> <span class="nav-text">编译实用</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#glog"><span class="nav-number">3.</span> <span class="nav-text">glog</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BD%BF%E7%94%A8"><span class="nav-number">3.1.</span> <span class="nav-text">使用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BC%96%E8%AF%91"><span class="nav-number">3.2.</span> <span class="nav-text">编译</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#rocksdb"><span class="nav-number">4.</span> <span class="nav-text">rocksdb</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BD%BF%E7%94%A8-1"><span class="nav-number">4.1.</span> <span class="nav-text">使用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BC%96%E8%AF%91-1"><span class="nav-number">4.2.</span> <span class="nav-text">编译</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#fruit"><span class="nav-number">5.</span> <span class="nav-text">fruit</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BD%BF%E7%94%A8-2"><span class="nav-number">5.1.</span> <span class="nav-text">使用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BC%96%E8%AF%91-2"><span class="nav-number">5.2.</span> <span class="nav-text">编译</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#protobuf"><span class="nav-number">6.</span> <span class="nav-text">protobuf</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#folly"><span class="nav-number">7.</span> <span class="nav-text">folly</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#abseil"><span class="nav-number">8.</span> <span class="nav-text">abseil</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#boost"><span class="nav-number">9.</span> <span class="nav-text">boost</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#fmt"><span class="nav-number">10.</span> <span class="nav-text">fmt</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#catch2"><span class="nav-number">11.</span> <span class="nav-text">catch2</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#poco"><span class="nav-number">12.</span> <span class="nav-text">poco</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/b945c282.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="一些c++库的使用总结 | phantom9999的博客">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          一些c++库的使用总结
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2020-05-04 20:06:10" itemprop="dateCreated datePublished" datetime="2020-05-04T20:06:10+00:00">2020-05-04</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/cpp-devel/" itemprop="url" rel="index"><span itemprop="name">cpp-devel</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>本文介绍一些c++库的使用。</p>
+<h1 id="gflags"><a href="#gflags" class="headerlink" title="gflags"></a>gflags</h1><h2 id="简单实用"><a href="#简单实用" class="headerlink" title="简单实用"></a>简单实用</h2><p>gflags是一个流行的解析命令行的c++库。用户使用这个库定义的变量，可以通过多种途径进行赋值。</p>
+<p>gflags支持定义多种数据类型，包括bool、int32、int64、uint64、double、string。</p>
+<p>定义一个变量的操作如下：</p>
+<pre class="line-numbers language-none"><code class="language-none">DEFINE_bool(name, &quot;default value&quot;, description);<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>然后在main函数开头添加<code>  google::ParseCommandLineFlags(&amp;argc, &amp;argv, true);</code>，在main函数末尾添加<code>  google::ShutDownCommandLineFlags();</code>。</p>
+<p>如果需要使用一个已经定义过的flags变量，则需要使用<code>DECLARE_XXX</code>，否则将会提示没有申明过这个变量。</p>
+<p>gflags提供参数校验器，使用RegisterFlagValidator函数注册校验器。</p>
+<p>gflags提供google::SetVersionString()函数设置版本信息(—version时返回的字符)。</p>
+<p>gflags提供gflags::SetUsageMessage函数设置帮助信息（—help时返回的字符）。</p>
+<p>gflags提供–flagfile参数指定配置文件，gflags将从这个配置文件中读取配置信息，同时，这个配置文件中也支持—flagfile读取配置。</p>
+<p>gflags提供—fromenv参数从环境变量中读取配置信息。</p>
+<h2 id="编译实用"><a href="#编译实用" class="headerlink" title="编译实用"></a>编译实用</h2><p>gflags一个比较坑的地方是，默认情况下gflags库的namespace是flags，而一大批依赖这个库的第三方库使用的google名字空间下的gflags。为了解决这个问题，需要在编译时指定名字空间（添加参数-DGFLAGS_NAMESPACE&#x3D;google)。</p>
+<p>有时候可能把gflags链接到动态链接库中，编译时的flags需要添加-fPIC，解决方法是在gflags中找到CMakeLists.txt中添加add_compile_options(-fPIC) 。</p>
+<p>默认情况下gflags使用Release编译的，为了方便调试，建议设置-DCMAKE_BUILD_TYPE&#x3D;RelWithDebInfo，即设置-o2 -g</p>
+<h1 id="glog"><a href="#glog" class="headerlink" title="glog"></a>glog</h1><h2 id="使用"><a href="#使用" class="headerlink" title="使用"></a>使用</h2><p>它是一个使用方便的日志库，这个库是一个带buffer的同步日志，不宜打太大的日志，也不宜打请求级别的日志。<br>如果需要打请求级别的日志，还是需要换成其他异步日志。</p>
+<p>使用起来极其方便，包含头文件(glog&#x2F;logging.h)，然后直接使用。</p>
+<p>需要注意的是，FATAL日志会出core。</p>
+<p>glog支持DLOG功能，这类日志在添加NDEBUG下不会打印DLOG日志，在没有这个flag下会打印这个日志，方便用户调试。</p>
+<p>glog支持VLOG功能，这类日志划分为多个级别，通过命令行参数控制打印的级别。</p>
+<p>使用时，在main函数开始添加google::InitGoogleLogging(argv[0]);开启使用glog之旅。</p>
+<h2 id="编译"><a href="#编译" class="headerlink" title="编译"></a>编译</h2><p>glog依赖gflags库，使用glog的话建议先安装一下gflags，同时名字空间设置成google。</p>
+<p>编译glog之前，先指定gflags路径，使用参数CMAKE_INCLUDE_PATH和CMAKE_LIBRARY_PATH完成。</p>
+<h1 id="rocksdb"><a href="#rocksdb" class="headerlink" title="rocksdb"></a>rocksdb</h1><p>一个内嵌kv存储，常被用做各种分布式kv存储系统。<br>它也可以用来简单存个数据，做个二级存储啥的，作为一次存储性能还是不够的，毕竟跳表的性能没法跟哈希表比。</p>
+<h2 id="使用-1"><a href="#使用-1" class="headerlink" title="使用"></a>使用</h2><h2 id="编译-1"><a href="#编译-1" class="headerlink" title="编译"></a>编译</h2><p>这个库依赖flags，所以编译前可以指定一下gflags，并添加参数-DWITH_GFLAGS&#x3D;1指定依赖flags。</p>
+<h1 id="fruit"><a href="#fruit" class="headerlink" title="fruit"></a>fruit</h1><h2 id="使用-2"><a href="#使用-2" class="headerlink" title="使用"></a>使用</h2><p>这是一个基于元编程实现的依赖注入库。</p>
+<h2 id="编译-2"><a href="#编译-2" class="headerlink" title="编译"></a>编译</h2><p>这个库依赖boost，编译时需要指定boost的目录，使用参数-DBoost_INCLUDE_DIR&#x3D;指定boost位置。</p>
+<p>这个库编译时建议添加-DBUILD_SHARED_LIBS&#x3D;OFF关闭动态链接库。</p>
+<h1 id="protobuf"><a href="#protobuf" class="headerlink" title="protobuf"></a>protobuf</h1><p>老牌的序列化、反序列化工具，常被用于各种rpc框架，数据传输等。<br>除此之外:</p>
+<ul>
+<li>可以序列化json。配合阿波罗实现一套强大的在线配置系统</li>
+<li>文本格式。一套简单实用的配置系统</li>
+</ul>
+<p>需要注意的是，基于bazel构建时默认开启编译优化；如果使用autogen.sh + configure构建时，需要手工添加”O2 -g”，不然就没开优化。</p>
+<h1 id="folly"><a href="#folly" class="headerlink" title="folly"></a>folly</h1><p>facebook开源的重量级库，极大的补充了c++的“基础设施”。<br>不足点，依赖比较多，编译起来比较费劲。</p>
+<h1 id="abseil"><a href="#abseil" class="headerlink" title="abseil"></a>abseil</h1><p>google开源的，对c++stl的补充，功能较少，更多的是兼容语言特性，让c++11标准下用上c++17、c++20的特性。<br>不足之处，代码不多，静态库一大堆，建议使用bazel或者cmake的find_package进行依赖打平，不然解决依赖问题就够麻烦的了。</p>
+<h1 id="boost"><a href="#boost" class="headerlink" title="boost"></a>boost</h1><p>c++ stl的补充，stl的候选集。<br>与folly、abseil相比，功能上 folly &gt; boost &gt; abseil，性能上folly &#x3D; abseil &gt; boost。<br>编译安装、链接这块相对于folly、abseil容易。</p>
+<h1 id="fmt"><a href="#fmt" class="headerlink" title="fmt"></a>fmt</h1><p>字符串格式化库，部分已经进入c++20，纯头文件。</p>
+<h1 id="catch2"><a href="#catch2" class="headerlink" title="catch2"></a>catch2</h1><p>单侧库，纯头文件，编译起来慢。</p>
+<h1 id="poco"><a href="#poco" class="headerlink" title="poco"></a>poco</h1><p>面向应用的库，各种常用中间件、工具封装都有，不过性能一般，没在生产环境使用过。</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/c/" rel="tag"># c++</a>
+              <a href="/tags/lib/" rel="tag"># lib</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/aef5c1c6.html" rel="prev" title="asio_multithread">
+                  <i class="fa fa-angle-left"></i> asio_multithread
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/1493c0ff.html" rel="next" title="autofdo调研">
+                  autofdo调研 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

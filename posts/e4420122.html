@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="深入分析 brpc 中 bthread 的底层实现，包括 M:N 线程模型、汇编级上下文切换、Work Stealing 调度、栈管理及同步原语。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="bthread 底层实现深入分析">
+<meta property="og:url" content="https://phantom9999.github.io/posts/e4420122.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="深入分析 brpc 中 bthread 的底层实现，包括 M:N 线程模型、汇编级上下文切换、Work Stealing 调度、栈管理及同步原语。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-25T23:40:00.000Z">
+<meta property="article:modified_time" content="2026-05-25T23:40:00.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="brpc">
+<meta property="article:tag" content="bthread">
+<meta property="article:tag" content="上下文切换">
+<meta property="article:tag" content="协程">
+<meta property="article:tag" content="用户态线程">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/e4420122.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/e4420122.html","path":"posts/e4420122.html","title":"bthread 底层实现深入分析"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>bthread 底层实现深入分析 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%95%B4%E4%BD%93%E6%9E%B6%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">整体架构</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2%EF%BC%9A%E6%B1%87%E7%BC%96%E7%BA%A7%E5%AE%9E%E7%8E%B0"><span class="nav-number">3.</span> <span class="nav-text">上下文切换：汇编级实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%8F%E7%A8%8B%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%9D%E5%A7%8B%E5%8C%96%EF%BC%9Abthread-make-fcontext"><span class="nav-number">3.1.</span> <span class="nav-text">协程上下文初始化：bthread_make_fcontext</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2%EF%BC%9Abthread-jump-fcontext"><span class="nav-number">3.2.</span> <span class="nav-text">上下文切换：bthread_jump_fcontext</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%B8%A4%E7%A7%8D%E5%88%87%E6%8D%A2%E5%9C%BA%E6%99%AF"><span class="nav-number">3.2.1.</span> <span class="nav-text">两种切换场景</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96%E8%A6%81%E7%82%B9"><span class="nav-number">3.2.2.</span> <span class="nav-text">性能优化要点</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%B0%83%E5%BA%A6%E6%A8%A1%E5%9E%8B"><span class="nav-number">4.</span> <span class="nav-text">调度模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%A4%E7%BA%A7%E4%BB%BB%E5%8A%A1%E9%98%9F%E5%88%97"><span class="nav-number">4.1.</span> <span class="nav-text">两级任务队列</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BB%BB%E5%8A%A1%E8%8E%B7%E5%8F%96%E4%B8%8E-Work-Stealing"><span class="nav-number">4.2.</span> <span class="nav-text">任务获取与 Work Stealing</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%8F%E4%BD%9C%E5%BC%8F%E8%B0%83%E5%BA%A6"><span class="nav-number">4.3.</span> <span class="nav-text">协作式调度</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A0%88%E7%AE%A1%E7%90%86"><span class="nav-number">5.</span> <span class="nav-text">栈管理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#StackPool%EF%BC%9A%E6%A0%88%E7%A9%BA%E9%97%B4%E5%A4%8D%E7%94%A8"><span class="nav-number">5.1.</span> <span class="nav-text">StackPool：栈空间复用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Guard-Page%EF%BC%9A%E6%A0%88%E6%BA%A2%E5%87%BA%E4%BF%9D%E6%8A%A4"><span class="nav-number">5.2.</span> <span class="nav-text">Guard Page：栈溢出保护</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A0%88%E5%A4%A7%E5%B0%8F%E5%88%86%E7%BA%A7"><span class="nav-number">5.3.</span> <span class="nav-text">栈大小分级</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD%EF%BC%9AButex"><span class="nav-number">6.</span> <span class="nav-text">同步原语：Butex</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81-Butex"><span class="nav-number">6.1.</span> <span class="nav-text">为什么需要 Butex</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Butex-%E6%A0%B8%E5%BF%83%E7%BB%93%E6%9E%84"><span class="nav-number">6.2.</span> <span class="nav-text">Butex 核心结构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#butex-wait%EF%BC%9A%E6%8C%82%E8%B5%B7%E5%BD%93%E5%89%8D-bthread"><span class="nav-number">6.3.</span> <span class="nav-text">butex_wait：挂起当前 bthread</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%98%B2%E6%AD%A2%E4%BF%A1%E5%8F%B7%E4%B8%A2%E5%A4%B1"><span class="nav-number">6.4.</span> <span class="nav-text">防止信号丢失</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#butex-wake%EF%BC%9A%E5%94%A4%E9%86%92%E7%AD%89%E5%BE%85%E8%80%85"><span class="nav-number">6.5.</span> <span class="nav-text">butex_wake：唤醒等待者</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bthread-Mutex-%E4%B8%8E-ConditionVariable"><span class="nav-number">6.6.</span> <span class="nav-text">bthread::Mutex 与 ConditionVariable</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E8%A6%81%E7%82%B9"><span class="nav-number">7.</span> <span class="nav-text">关键要点</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2%E6%98%AF-bthread-%E7%9A%84%E6%80%A7%E8%83%BD%E5%9F%BA%E7%9F%B3"><span class="nav-number">7.1.</span> <span class="nav-text">1. 上下文切换是 bthread 的性能基石</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-Work-Stealing-%E4%BB%8E%E9%98%9F%E5%B0%BE%E7%AA%83%E5%8F%96"><span class="nav-number">7.2.</span> <span class="nav-text">2. Work Stealing 从队尾窃取</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-%E9%98%B2%E6%AD%A2-Butex-%E4%BF%A1%E5%8F%B7%E4%B8%A2%E5%A4%B1"><span class="nav-number">7.3.</span> <span class="nav-text">3. 防止 Butex 信号丢失</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-%E9%98%BB%E5%A1%9E%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8%E4%BC%9A%E6%8B%96%E5%9E%AE%E6%95%B4%E4%B8%AA-worker"><span class="nav-number">7.4.</span> <span class="nav-text">4. 阻塞系统调用会拖垮整个 worker</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-%E6%A0%88%E6%BA%A2%E5%87%BA%E6%9C%89-Guard-Page-%E5%85%9C%E5%BA%95"><span class="nav-number">7.5.</span> <span class="nav-text">5. 栈溢出有 Guard Page 兜底</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">8.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%8F%82%E8%80%83"><span class="nav-number">9.</span> <span class="nav-text">参考</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/e4420122.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="bthread 底层实现深入分析 | phantom9999的博客">
+      <meta itemprop="description" content="深入分析 brpc 中 bthread 的底层实现，包括 M:N 线程模型、汇编级上下文切换、Work Stealing 调度、栈管理及同步原语。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          bthread 底层实现深入分析
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2026-05-25 23:40:00" itemprop="dateCreated datePublished" datetime="2026-05-25T23:40:00+00:00">2026-05-25</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/cpp-devel/" itemprop="url" rel="index"><span itemprop="name">cpp-devel</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">深入分析 brpc 中 bthread 的底层实现，包括 M:N 线程模型、汇编级上下文切换、Work Stealing 调度、栈管理及同步原语。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>bthread 是 Apache bRPC 框架中的 M:N 用户态线程库，设计目标是以极低的成本支撑百万级并发。它与 Go 的 goroutine 理念相似——将大量用户态任务映射到少量内核线程上执行，避免内核态上下文切换的开销。</p>
+<p>bthread 的上下文切换参考了 boost.context 的设计，用<strong>手写汇编</strong>直接操作寄存器，切换耗时仅约 100-200 ns，比 pthread 切换快 10 倍以上。bRPC 的高并发能力很大程度上依赖 bthread 的高效调度。</p>
+<h1 id="整体架构"><a href="#整体架构" class="headerlink" title="整体架构"></a>整体架构</h1><p>bthread 的 M:N 模型由三层结构组成：</p>
+<pre class="line-numbers language-none"><code class="language-none">bthread (百万级)  →  TaskGroup (每核一个)  →  pthread worker (少量)
+   用户态任务              两级队列 +            内核线程
+   (协程栈+上下文)          Work Stealing         (物理执行单元)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>核心数据结构：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>生命周期</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>TaskControl (TC)</strong></td>
+<td>进程全局唯一</td>
+<td>管理所有 worker 线程，协调全局任务窃取</td>
+</tr>
+<tr>
+<td><strong>TaskGroup (TG)</strong></td>
+<td>每个 pthread 一个</td>
+<td>worker 调度单元，维护任务队列，管理 bthread 执行</td>
+</tr>
+<tr>
+<td><strong>TaskMeta (TM)</strong></td>
+<td>每个 bthread 一个</td>
+<td>保存 bthread 的上下文：回调函数、栈、寄存器、状态等</td>
+</tr>
+</tbody></table>
+<h1 id="上下文切换：汇编级实现"><a href="#上下文切换：汇编级实现" class="headerlink" title="上下文切换：汇编级实现"></a>上下文切换：汇编级实现</h1><p>上下文切换是 bthread 性能的核心。bthread 用汇编直接操作寄存器，仅保存最少的必要状态，实现了纳秒级的协程切换。</p>
+<h2 id="协程上下文初始化：bthread-make-fcontext"><a href="#协程上下文初始化：bthread-make-fcontext" class="headerlink" title="协程上下文初始化：bthread_make_fcontext"></a>协程上下文初始化：<code>bthread_make_fcontext</code></h2><p><code>make_fcontext</code> 初始化一个新协程的栈空间，设置好入口函数和执行完毕后跳转的 finish 函数：</p>
+<pre class="line-numbers language-asm" data-language="asm"><code class="language-asm">bthread_make_fcontext:
+    movq  %rdi, %rax        ; %rdi &#x3D; 栈底地址
+    andq  $-16, %rax         ; 16 字节对齐（x86-64 ABI 要求）
+    leaq  -0x48(%rax), %rax  ; 预留 72 字节上下文空间
+    movq  %rdx, 0x38(%rax)   ; 偏移 0x38: 保存入口函数 fn 的地址
+    stmxcsr (%rax)           ; 偏移 0x00: 保存 MXCSR 浮点状态
+    fnstcw  0x4(%rax)        ; 偏移 0x04: 保存 FPU 控制字
+    leaq  finish(%rip), %rcx   ; 加载 finish 地址
+    movq  %rcx, 0x40(%rax)   ; 偏移 0x40: 设置返回地址为 finish
+    ret                      ; 返回初始化后的上下文指针<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>初始化后的栈布局（从高地址到低地址）：</p>
+<pre class="line-numbers language-none"><code class="language-none">+-----------------+  高地址（栈底）
+|   未使用空间      |
++-----------------+
+|   finish 地址    |  ← 0x40(%rax)  — fn 返回后跳转到这里（调用 _exit）
++-----------------+
+|   入口函数 fn    |  ← 0x38(%rax)  — bthread 要执行的函数指针
++-----------------+
+|   FPU 控制字     |  ← 0x04(%rax)
++-----------------+
+|   MXCSR 状态     |  ← 0x00(%rax)  — context 指针指向这里
++-----------------+  低地址（栈顶）<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>关键在于：栈上预置了 <code>finish</code> 作为返回地址。当 fn 执行完毕执行 <code>ret</code> 指令时，会把 <code>finish</code> 的地址弹出到 %rip，从而自动跳转到 <code>finish</code> → <code>_exit</code>，安全结束协程。</p>
+<h2 id="上下文切换：bthread-jump-fcontext"><a href="#上下文切换：bthread-jump-fcontext" class="headerlink" title="上下文切换：bthread_jump_fcontext"></a>上下文切换：<code>bthread_jump_fcontext</code></h2><p>切换的核心流程分为两步：保存当前协程的寄存器到栈上，然后从目标协程的栈上恢复寄存器并跳转。整个过程是一个对称操作：</p>
+<pre class="line-numbers language-asm" data-language="asm"><code class="language-asm">bthread_jump_fcontext:
+    ; &#x3D;&#x3D;&#x3D;&#x3D;&#x3D; 第一步：保存当前协程的寄存器 &#x3D;&#x3D;&#x3D;&#x3D;&#x3D;
+    pushq  %rbp              ; 被调用者保存寄存器
+    pushq  %rbx
+    pushq  %r15
+    pushq  %r14
+    pushq  %r13
+    pushq  %r12
+
+    leaq  -0x8(%rsp), %rsp   ; 预留 8 字节给浮点状态
+
+    cmp   $0, %rcx           ; preserve_fpu 参数
+    je    1f
+    stmxcsr  (%rsp)          ; 保存 MXCSR
+    fnstcw   0x4(%rsp)       ; 保存 FPU 控制字
+1:
+    movq  %rsp, (%rdi)       ; 将 %rsp 保存到 from-&gt;context
+
+    ; &#x3D;&#x3D;&#x3D;&#x3D;&#x3D; 第二步：切换到目标协程的栈 &#x3D;&#x3D;&#x3D;&#x3D;&#x3D;
+    movq  %rsi, %rsp         ; 将 to-&gt;context 加载到 %rsp（栈切换！）
+
+    cmp   $0, %rcx           ; 恢复浮点状态
+    je    2f
+    ldmxcsr  (%rsp)          ; 恢复 MXCSR
+    fldcw   0x4(%rsp)        ; 恢复 FPU 控制字
+2:
+    leaq  0x8(%rsp), %rsp
+
+    popq  %r12               ; 恢复被调用者保存寄存器（逆序）
+    popq  %r13
+    popq  %r14
+    popq  %r15
+    popq  %rbx
+    popq  %rbp
+
+    popq  %r8                ; 弹出返回地址
+    movq  %rdx, %rax         ; 设置返回值
+    movq  %rdx, %rdi         ; 设置第一个参数
+    jmp   *%r8               ; 跳转到目标协程！<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="两种切换场景"><a href="#两种切换场景" class="headerlink" title="两种切换场景"></a>两种切换场景</h3><table>
+<thead>
+<tr>
+<th></th>
+<th>切换到新创建的 bthread</th>
+<th>切换到已运行过的 bthread</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>%r8 弹出的内容</strong></td>
+<td>fn 入口函数地址</td>
+<td>上次切换时压入的下一条指令地址</td>
+</tr>
+<tr>
+<td><strong>执行效果</strong></td>
+<td>开始执行 fn；fn 返回后跳转到 finish</td>
+<td>从上次中断处继续执行</td>
+</tr>
+</tbody></table>
+<h3 id="性能优化要点"><a href="#性能优化要点" class="headerlink" title="性能优化要点"></a>性能优化要点</h3><ol>
+<li><strong>只保存被调用者保存寄存器</strong>：%rbx, %rbp, %r12-%r15，调用者保存寄存器（%rax, %rcx, %rdx, %rsi, %rdi, %r8-%r11）由编译器自动管理，无需保存</li>
+<li><strong>浮点状态按需加载</strong>：通过 <code>preserve_fpu</code> 参数控制是否保存&#x2F;恢复浮点状态。大部分 bthread 任务不涉及浮点运算，跳过这步可以节省数十纳秒</li>
+<li><strong>16 字节栈对齐</strong>：符合 x86-64 ABI，保证 SIMD 指令正常执行</li>
+</ol>
+<h1 id="调度模型"><a href="#调度模型" class="headerlink" title="调度模型"></a>调度模型</h1><h2 id="两级任务队列"><a href="#两级任务队列" class="headerlink" title="两级任务队列"></a>两级任务队列</h2><p>每个 TaskGroup 维护两个队列，设计上刻意区分了「来源」：</p>
+<table>
+<thead>
+<tr>
+<th>队列</th>
+<th>类型</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>_rq</code> (WorkStealingQueue)</td>
+<td>无锁环形队列</td>
+<td>本 worker 自身创建的 bthread</td>
+</tr>
+<tr>
+<td><code>_remote_rq</code> (RemoteTaskQueue)</td>
+<td>带锁队列</td>
+<td>非 worker 线程（主线程等）提交的 bthread</td>
+</tr>
+</tbody></table>
+<p><strong>关键设计</strong>：worker 不从自己的 <code>_rq</code> 取任务——自己的 <code>_rq</code> 只在 <code>ending_sched()</code> → <code>task_runner()</code> 的过程中被消费。<code>wait_task()</code> 只从 <code>_remote_rq</code> 取，或通过 Work Stealing 从其他 worker 的队列窃取。</p>
+<p>这种设计避免了同一个 <code>_rq</code> 被多个 TaskGroup 同时访问产生锁竞争。</p>
+<h2 id="任务获取与-Work-Stealing"><a href="#任务获取与-Work-Stealing" class="headerlink" title="任务获取与 Work Stealing"></a>任务获取与 Work Stealing</h2><p>Worker 在无任务可执行时，按以下优先级获取新任务：</p>
+<pre class="line-numbers language-none"><code class="language-none">wait_task()
+ ├── 1. 本 TG._remote_rq.pop()       ← 优先级最高，处理外部提交的任务
+ ├── 2. _control.steal_task()        ← 全局 Work Stealing
+ │    ├── 其他 TG._rq.steal()        ← 从队尾窃取（无锁 CAS，缓存友好）
+ │    └── 其他 TG._remote_rq.pop()   ← 窃取外部提交的任务
+ └── 3. _pl-&gt;wait()                  ← 所有尝试失败，休眠等待唤醒<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>Work Stealing 的核心逻辑是<strong>随机遍历</strong>，配合 offset 步进，避免每次从同一个 worker 窃取产生热点：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">bool</span> <span class="token class-name">TaskControl</span><span class="token double-colon punctuation">::</span><span class="token function">steal_task</span><span class="token punctuation">(</span>bthread_t<span class="token operator">*</span> tid<span class="token punctuation">,</span> size_t<span class="token operator">*</span> seed<span class="token punctuation">,</span> size_t offset<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">for</span> <span class="token punctuation">(</span>size_t i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> ngroup<span class="token punctuation">;</span> <span class="token operator">++</span>i<span class="token punctuation">,</span> <span class="token operator">*</span>seed <span class="token operator">+=</span> offset<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        TaskGroup<span class="token operator">*</span> g <span class="token operator">=</span> _groups<span class="token punctuation">[</span><span class="token operator">*</span>seed <span class="token operator">%</span> ngroup<span class="token punctuation">]</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>g <span class="token operator">&amp;&amp;</span> g<span class="token operator">-></span>_rq<span class="token punctuation">.</span><span class="token function">steal</span><span class="token punctuation">(</span>tid<span class="token punctuation">)</span><span class="token punctuation">)</span>   <span class="token comment">// 从队尾窃取，减少 CAS 冲突</span>
+            <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>g <span class="token operator">&amp;&amp;</span> g<span class="token operator">-></span>_remote_rq<span class="token punctuation">.</span><span class="token function">pop</span><span class="token punctuation">(</span>tid<span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token keyword">return</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>窃取队尾而不是队头</strong>的原因：push 和 pop 都在队头操作，如果窃取也走队头，会产生频繁的 CAS 竞争。从队尾窃取与 push&#x2F;pop 错开，降低冲突。</p>
+<h2 id="协作式调度"><a href="#协作式调度" class="headerlink" title="协作式调度"></a>协作式调度</h2><p>bthread 采用<strong>非抢占式</strong>调度，只在特定时机主动让出 CPU：</p>
+<table>
+<thead>
+<tr>
+<th>时机</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>bthread_yield()</code> &#x2F; <code>bthread_usleep()</code></td>
+<td>立即切换，挂起当前 bthread</td>
+</tr>
+<tr>
+<td><code>bthread_mutex_lock()</code> 等待锁</td>
+<td>在 butex 上挂起，让出 worker</td>
+</tr>
+<tr>
+<td>I&#x2F;O 等待（epoll 结合）</td>
+<td>EventDispatcher 检测到事件未就绪时自动 yield</td>
+</tr>
+<tr>
+<td>阻塞系统调用（如 <code>read()</code>）</td>
+<td>整个 worker 被 OS 挂起，其他 worker 偷取该 worker 队列的任务</td>
+</tr>
+</tbody></table>
+<p>当 bthread 执行阻塞系统调用时，整个 pthread worker 都会被 OS 挂起。这时其他空闲的 worker 通过 Work Stealing 会偷走被阻塞 worker 的队列中的 bthread 继续执行，保证整体吞吐不受影响。</p>
+<h1 id="栈管理"><a href="#栈管理" class="headerlink" title="栈管理"></a>栈管理</h1><p>每个 bthread 需要独立的栈空间。bthread 通过 StackPool 和 mmap 实现高效的栈管理。</p>
+<h2 id="StackPool：栈空间复用"><a href="#StackPool：栈空间复用" class="headerlink" title="StackPool：栈空间复用"></a>StackPool：栈空间复用</h2><p>bthread 分配栈时不直接调用 <code>malloc</code>，而是优先从对象池中复用已分配的栈，避免频繁内存分配：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 全局栈池，按栈大小分级管理</span>
+<span class="token keyword">void</span><span class="token operator">*</span> <span class="token class-name">StackPool</span><span class="token double-colon punctuation">::</span><span class="token function">alloc</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>cached_stacks<span class="token punctuation">.</span><span class="token function">empty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token keyword">return</span> cached_stacks<span class="token punctuation">.</span><span class="token function">pop_back</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 复用已有栈</span>
+    <span class="token keyword">return</span> <span class="token function">mmap_for_stack</span><span class="token punctuation">(</span>STACK_SIZE<span class="token punctuation">)</span><span class="token punctuation">;</span>    <span class="token comment">// 首次分配</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token keyword">void</span> <span class="token class-name">StackPool</span><span class="token double-colon punctuation">::</span><span class="token function">free</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span> stack<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    cached_stacks<span class="token punctuation">.</span><span class="token function">push_back</span><span class="token punctuation">(</span>stack<span class="token punctuation">)</span><span class="token punctuation">;</span>       <span class="token comment">// 归还池中，下次复用</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="Guard-Page：栈溢出保护"><a href="#Guard-Page：栈溢出保护" class="headerlink" title="Guard Page：栈溢出保护"></a>Guard Page：栈溢出保护</h2><p>每个 bthread 的栈通过 <code>mmap</code> 匿名映射分配，两端设置保护页，栈溢出时立即触发 SIGSEGV，便于定位问题：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">void</span><span class="token operator">*</span> <span class="token function">alloc_stack</span><span class="token punctuation">(</span>size_t stacksize<span class="token punctuation">,</span> size_t guardsize<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    size_t pagesize <span class="token operator">=</span> <span class="token function">getpagesize</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    size_t alloc_size <span class="token operator">=</span> stacksize <span class="token operator">+</span> <span class="token number">2</span> <span class="token operator">*</span> guardsize <span class="token operator">*</span> pagesize<span class="token punctuation">;</span>
+
+    <span class="token keyword">void</span><span class="token operator">*</span> base <span class="token operator">=</span> <span class="token function">mmap</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">,</span> alloc_size<span class="token punctuation">,</span> PROT_READ<span class="token operator">|</span>PROT_WRITE<span class="token punctuation">,</span>
+                      MAP_PRIVATE<span class="token operator">|</span>MAP_ANONYMOUS<span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// 两端设置为不可读写</span>
+    <span class="token function">mprotect</span><span class="token punctuation">(</span>base<span class="token punctuation">,</span> guardsize <span class="token operator">*</span> pagesize<span class="token punctuation">,</span> PROT_NONE<span class="token punctuation">)</span><span class="token punctuation">;</span>                    <span class="token comment">// 低端保护页</span>
+    <span class="token function">mprotect</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token keyword">char</span><span class="token operator">*</span><span class="token punctuation">)</span>base <span class="token operator">+</span> alloc_size <span class="token operator">-</span> guardsize <span class="token operator">*</span> pagesize<span class="token punctuation">,</span>
+             guardsize <span class="token operator">*</span> pagesize<span class="token punctuation">,</span> PROT_NONE<span class="token punctuation">)</span><span class="token punctuation">;</span>                          <span class="token comment">// 高端保护页</span>
+
+    <span class="token keyword">return</span> <span class="token punctuation">(</span><span class="token keyword">char</span><span class="token operator">*</span><span class="token punctuation">)</span>base <span class="token operator">+</span> alloc_size<span class="token punctuation">;</span>  <span class="token comment">// 返回栈底（高地址）</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>栈底在高地址，栈向低地址增长。一旦越界触碰保护页，立即 core dump，不会静默地破坏相邻内存。</p>
+<h2 id="栈大小分级"><a href="#栈大小分级" class="headerlink" title="栈大小分级"></a>栈大小分级</h2><p>bthread 通常提供小&#x2F;中&#x2F;大三种栈规格，用户可以根据 bthread 的实际需要选择，减少内存浪费。对于只做简单转发的 bthread，几 KB 的栈就已足够，无需默认分配数百 KB。</p>
+<h1 id="同步原语：Butex"><a href="#同步原语：Butex" class="headerlink" title="同步原语：Butex"></a>同步原语：Butex</h1><h2 id="为什么需要-Butex"><a href="#为什么需要-Butex" class="headerlink" title="为什么需要 Butex"></a>为什么需要 Butex</h2><p>在 bthread 中如果直接用 <code>pthread_mutex</code>，锁等待时被挂起的是<strong>整个 pthread worker</strong>，导致该 worker 无法调度其他 bthread，严重影响并发能力。Butex 的设计目标是：<strong>在 bthread 等待时只挂起这个 bthread，让 pthread worker 继续执行其他 bthread</strong>。</p>
+<p>Butex 的设计借鉴了 Linux 内核的 futex 机制：</p>
+<pre class="line-numbers language-none"><code class="language-none">pthread : futex &#x3D; bthread : butex<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<h2 id="Butex-核心结构"><a href="#Butex-核心结构" class="headerlink" title="Butex 核心结构"></a>Butex 核心结构</h2><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">struct</span> <span class="token class-name">Butex</span> <span class="token punctuation">&#123;</span>
+    butil<span class="token double-colon punctuation">::</span>atomic<span class="token operator">&lt;</span><span class="token keyword">int</span><span class="token operator">></span> value<span class="token punctuation">;</span>         <span class="token comment">// 用户态原子变量（锁状态）</span>
+    ButexWaiterList waiters<span class="token punctuation">;</span>          <span class="token comment">// 等待者链表（侵入式双向链表）</span>
+    FastPthreadMutex waiter_lock<span class="token punctuation">;</span>     <span class="token comment">// 保护等待队列的 pthread 锁</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+
+<span class="token keyword">struct</span> <span class="token class-name">ButexBthreadWaiter</span> <span class="token operator">:</span> <span class="token base-clause"><span class="token keyword">public</span> <span class="token class-name">ButexWaiter</span></span> <span class="token punctuation">&#123;</span>
+    TaskMeta<span class="token operator">*</span> task_meta<span class="token punctuation">;</span>              <span class="token comment">// 当前 bthread 的 TaskMeta</span>
+    TimerThread<span class="token double-colon punctuation">::</span>TaskId sleep_id<span class="token punctuation">;</span>     <span class="token comment">// 超时定时任务 ID</span>
+    WaiterState waiter_state<span class="token punctuation">;</span>         <span class="token comment">// 等待状态</span>
+    <span class="token keyword">int</span> expected_value<span class="token punctuation">;</span>               <span class="token comment">// 挂起前期望的 value 值</span>
+    TaskControl<span class="token operator">*</span> control<span class="token punctuation">;</span>             <span class="token comment">// 全局 TaskControl</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="butex-wait：挂起当前-bthread"><a href="#butex-wait：挂起当前-bthread" class="headerlink" title="butex_wait：挂起当前 bthread"></a>butex_wait：挂起当前 bthread</h2><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">int</span> <span class="token function">butex_wait</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span> arg<span class="token punctuation">,</span> <span class="token keyword">int</span> expected_value<span class="token punctuation">,</span> <span class="token keyword">const</span> timespec<span class="token operator">*</span> abstime<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    Butex<span class="token operator">*</span> b <span class="token operator">=</span> <span class="token function">container_of</span><span class="token punctuation">(</span><span class="token generic-function"><span class="token function">static_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>butil<span class="token double-colon punctuation">::</span>atomic<span class="token operator">&lt;</span><span class="token keyword">int</span><span class="token operator">></span><span class="token operator">*</span><span class="token operator">></span></span></span><span class="token punctuation">(</span>arg<span class="token punctuation">)</span><span class="token punctuation">,</span> Butex<span class="token punctuation">,</span> value<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// 快速检查：value 不等于期望值，直接返回（已被修改，不需等待）</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>b<span class="token operator">-></span>value<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span>memory_order_relaxed<span class="token punctuation">)</span> <span class="token operator">!=</span> expected_value<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">return</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">;</span>  <span class="token comment">// EWOULDBLOCK</span>
+    <span class="token punctuation">&#125;</span>
+
+    TaskGroup<span class="token operator">*</span> g <span class="token operator">=</span> tls_task_group<span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>g <span class="token operator">==</span> <span class="token constant">NULL</span> <span class="token operator">||</span> g<span class="token operator">-></span><span class="token function">is_current_pthread_task</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 当前是 pthread（非 worker 线程），走 pthread 挂起逻辑</span>
+        <span class="token keyword">return</span> <span class="token function">butex_wait_from_pthread</span><span class="token punctuation">(</span>g<span class="token punctuation">,</span> b<span class="token punctuation">,</span> expected_value<span class="token punctuation">,</span> abstime<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// 当前是 bthread：在 bthread 栈上创建 waiter</span>
+    ButexBthreadWaiter bbw<span class="token punctuation">;</span>
+    bbw<span class="token punctuation">.</span>tid <span class="token operator">=</span> g<span class="token operator">-></span><span class="token function">current_tid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    bbw<span class="token punctuation">.</span>expected_value <span class="token operator">=</span> expected_value<span class="token punctuation">;</span>
+
+    <span class="token comment">// 设置超时</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>abstime <span class="token operator">!=</span> <span class="token constant">NULL</span><span class="token punctuation">)</span>
+        bbw<span class="token punctuation">.</span>sleep_id <span class="token operator">=</span> <span class="token function">get_global_timer_thread</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">-></span><span class="token function">schedule</span><span class="token punctuation">(</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// 注册 remain 回调：在 worker 切换前原子地完成「检查 + 入队」</span>
+    g<span class="token operator">-></span><span class="token function">set_remained</span><span class="token punctuation">(</span>wait_for_butex<span class="token punctuation">,</span> <span class="token operator">&amp;</span>bbw<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// 让出 CPU，切换到其他 bthread</span>
+    g<span class="token operator">-></span><span class="token function">yield</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>bbw<span class="token punctuation">.</span>task_meta<span class="token operator">-></span>tid<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// 被唤醒后从这里继续执行</span>
+    <span class="token function">unsleep_if_necessary</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>bbw<span class="token punctuation">,</span> <span class="token function">get_global_timer_thread</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="防止信号丢失"><a href="#防止信号丢失" class="headerlink" title="防止信号丢失"></a>防止信号丢失</h2><p>Butex 实现中最关键的细节是<strong>防止唤醒信号丢失</strong>。如果「检查 value」和「将 waiter 入队」分别在两个临界区内完成，中间存在窗口：另一个线程可能在检查之后、入队之前调用 <code>butex_wake</code>，导致唤醒信号丢失。</p>
+<p>Butex 的解决方案是 <code>wait_for_butex</code>——在持有 <code>waiter_lock</code> 的临界区内<strong>原子地</strong>完成检查和入队：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">void</span> <span class="token function">wait_for_butex</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span> arg<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    ButexBthreadWaiter<span class="token operator">*</span> bw <span class="token operator">=</span> <span class="token generic-function"><span class="token function">static_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>ButexBthreadWaiter<span class="token operator">*</span><span class="token operator">></span></span></span><span class="token punctuation">(</span>arg<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    std<span class="token double-colon punctuation">::</span>lock_guard<span class="token operator">&lt;</span>FastPthreadMutex<span class="token operator">></span> <span class="token function">guard</span><span class="token punctuation">(</span>bw<span class="token operator">-></span>initial_butex<span class="token operator">-></span>waiter_lock<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>bw<span class="token operator">-></span>initial_butex<span class="token operator">-></span>value<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">!=</span> bw<span class="token operator">-></span>expected_value<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// value 已变化！不挂起，重新加入就绪队列</span>
+        bw<span class="token operator">-></span>control<span class="token operator">-></span><span class="token function">ready_to_run</span><span class="token punctuation">(</span>bw<span class="token operator">-></span>task_meta<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// value 未变，安全地将 waiter 加入等待队列</span>
+        bw<span class="token operator">-></span>container<span class="token punctuation">.</span><span class="token function">store</span><span class="token punctuation">(</span>bw<span class="token operator">-></span>initial_butex<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        bw<span class="token operator">-></span>initial_butex<span class="token operator">-></span>waiters<span class="token punctuation">.</span><span class="token function">push_back</span><span class="token punctuation">(</span>bw<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>wait_for_butex</code> 作为 remain 回调，在 worker 切换到下一个 bthread <strong>之前</strong>执行。它持有 <code>waiter_lock</code>，保证与 <code>butex_wake</code> 的互斥，杜绝唤醒丢失。</p>
+<h2 id="butex-wake：唤醒等待者"><a href="#butex-wake：唤醒等待者" class="headerlink" title="butex_wake：唤醒等待者"></a>butex_wake：唤醒等待者</h2><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">int</span> <span class="token function">butex_wake</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span> arg<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    Butex<span class="token operator">*</span> b <span class="token operator">=</span> <span class="token function">container_of</span><span class="token punctuation">(</span><span class="token generic-function"><span class="token function">static_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>butil<span class="token double-colon punctuation">::</span>atomic<span class="token operator">&lt;</span><span class="token keyword">int</span><span class="token operator">></span><span class="token operator">*</span><span class="token operator">></span></span></span><span class="token punctuation">(</span>arg<span class="token punctuation">)</span><span class="token punctuation">,</span> Butex<span class="token punctuation">,</span> value<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    ButexWaiter<span class="token operator">*</span> front <span class="token operator">=</span> <span class="token constant">NULL</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#123;</span>
+        std<span class="token double-colon punctuation">::</span>lock_guard<span class="token operator">&lt;</span>FastPthreadMutex<span class="token operator">></span> <span class="token function">guard</span><span class="token punctuation">(</span>b<span class="token operator">-></span>waiter_lock<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>b<span class="token operator">-></span>waiters<span class="token punctuation">.</span><span class="token function">empty</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            front <span class="token operator">=</span> b<span class="token operator">-></span>waiters<span class="token punctuation">.</span><span class="token function">pop_front</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            front<span class="token operator">-></span>container<span class="token punctuation">.</span><span class="token function">store</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>front <span class="token operator">==</span> <span class="token constant">NULL</span><span class="token punctuation">)</span> <span class="token keyword">return</span> <span class="token number">0</span><span class="token punctuation">;</span>
+
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>front<span class="token operator">-></span>tid <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 唤醒的是 pthread</span>
+        <span class="token function">wakeup_pthread</span><span class="token punctuation">(</span><span class="token generic-function"><span class="token function">static_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>ButexPthreadWaiter<span class="token operator">*</span><span class="token operator">></span></span></span><span class="token punctuation">(</span>front<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 唤醒的是 bthread：加入就绪队列</span>
+        ButexBthreadWaiter<span class="token operator">*</span> bbw <span class="token operator">=</span> <span class="token generic-function"><span class="token function">static_cast</span><span class="token generic class-name"><span class="token operator">&lt;</span>ButexBthreadWaiter<span class="token operator">*</span><span class="token operator">></span></span></span><span class="token punctuation">(</span>front<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">unsleep_if_necessary</span><span class="token punctuation">(</span>bbw<span class="token punctuation">,</span> <span class="token function">get_global_timer_thread</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// 调用者是 worker 线程：直接放入本地队列（nosignal=true，避免通知已有 worker 自身）</span>
+        <span class="token comment">// 调用者是非 worker：放入 remote_rq</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>current_worker<span class="token punctuation">)</span>
+            current_worker<span class="token operator">-></span><span class="token function">ready_to_run</span><span class="token punctuation">(</span>bbw<span class="token operator">-></span>task_meta<span class="token punctuation">,</span> <span class="token boolean">true</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">else</span>
+            bbw<span class="token operator">-></span>control<span class="token operator">-></span><span class="token function">ready_to_run_remote</span><span class="token punctuation">(</span>bbw<span class="token operator">-></span>task_meta<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="bthread-Mutex-与-ConditionVariable"><a href="#bthread-Mutex-与-ConditionVariable" class="headerlink" title="bthread::Mutex 与 ConditionVariable"></a>bthread::Mutex 与 ConditionVariable</h2><p><code>bthread::Mutex</code> 和 <code>bthread::ConditionVariable</code> 是 Butex 的上层封装，接口与 <code>std::mutex</code> &#x2F; <code>std::condition_variable</code> 兼容，但挂起的是 bthread 而非 pthread：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">Mutex</span> <span class="token punctuation">&#123;</span>
+    butil<span class="token double-colon punctuation">::</span>atomic<span class="token operator">&lt;</span><span class="token keyword">int</span><span class="token operator">></span> _butex<span class="token punctuation">;</span>  <span class="token comment">// 底层基于 butex value</span>
+
+    <span class="token keyword">void</span> <span class="token function">lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 快速路径：CAS 获取锁</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>_butex<span class="token punctuation">.</span><span class="token function">exchange</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> memory_order_acquire<span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token number">0</span><span class="token punctuation">)</span>
+            <span class="token keyword">return</span><span class="token punctuation">;</span>
+        <span class="token comment">// 慢速路径：在 butex 上等待</span>
+        <span class="token function">butex_wait</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>_butex<span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">void</span> <span class="token function">unlock</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        _butex<span class="token punctuation">.</span><span class="token function">store</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> memory_order_release<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token function">butex_wake</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>_butex<span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// 唤醒一个等待者</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>整体同步体系的分层结构：</p>
+<pre class="line-numbers language-none"><code class="language-none">bthread::Mutex &#x2F; bthread::ConditionVariable    ← 对外接口
+butex (butex_wait &#x2F; butex_wake &#x2F; wake_all)    ← bthread 粒度挂起&#x2F;唤醒
+FastPthreadMutex (futex_wait &#x2F; futex_wake)    ← pthread 粒度（保护 waiter 队列）
+Linux futex 系统调用                            ← 内核态（竞争激烈时陷入）<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h1 id="关键要点"><a href="#关键要点" class="headerlink" title="关键要点"></a>关键要点</h1><h2 id="1-上下文切换是-bthread-的性能基石"><a href="#1-上下文切换是-bthread-的性能基石" class="headerlink" title="1. 上下文切换是 bthread 的性能基石"></a>1. 上下文切换是 bthread 的性能基石</h2><p>仅保存 6 个被调用者保存寄存器 + 可选的浮点状态，浮点状态按需加载，切换耗时 <del>100-200ns。这是比 pthread（</del>1-5μs）快 10 倍以上的根本原因。</p>
+<h2 id="2-Work-Stealing-从队尾窃取"><a href="#2-Work-Stealing-从队尾窃取" class="headerlink" title="2. Work Stealing 从队尾窃取"></a>2. Work Stealing 从队尾窃取</h2><p>push&#x2F;pop 在队头，窃取在队尾——错开操作位置，减少 CAS 竞争，同时提升了 CPU 缓存命中率。</p>
+<h2 id="3-防止-Butex-信号丢失"><a href="#3-防止-Butex-信号丢失" class="headerlink" title="3. 防止 Butex 信号丢失"></a>3. 防止 Butex 信号丢失</h2><p>「检查 value + 入队」必须在同一临界区内原子完成。Butex 通过 remain 回调机制在持有 <code>waiter_lock</code> 时执行这两个操作，与 <code>butex_wake</code> 互斥，保证不会丢失唤醒。</p>
+<h2 id="4-阻塞系统调用会拖垮整个-worker"><a href="#4-阻塞系统调用会拖垮整个-worker" class="headerlink" title="4. 阻塞系统调用会拖垮整个 worker"></a>4. 阻塞系统调用会拖垮整个 worker</h2><p>bthread 是协作式调度，如果 bthread 中执行了阻塞的系统调用（如同步 <code>read()</code>），整个 pthread worker 会被 OS 挂起。但其他 worker 会通过 Work Stealing 偷走被阻塞 worker 的任务，不会造成全局阻塞。最佳实践是：在 bthread 中始终使用异步 I&#x2F;O，避免直接调用阻塞系统调用。</p>
+<h2 id="5-栈溢出有-Guard-Page-兜底"><a href="#5-栈溢出有-Guard-Page-兜底" class="headerlink" title="5. 栈溢出有 Guard Page 兜底"></a>5. 栈溢出有 Guard Page 兜底</h2><p>bthread 栈通过 <code>mmap</code> + <code>mprotect</code> 设置保护页，栈溢出时立即触发 SIGSEGV 产生 core dump，不会静默破坏相邻内存。定位问题时可以直接从 core 文件看到溢出位置。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>bthread 通过手写汇编实现寄存器级的上下文切换（~100ns），结合 M:N 调度和 Work Stealing 负载均衡，在用户态支撑百万级并发任务。Butex 提供了 bthread 粒度的同步原语，确保锁等待只挂起 bthread 而非整个 pthread。这些设计共同构成了 bRPC 高性能的基石。</p>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><ul>
+<li><span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL2FwYWNoZS9icnBj">bRPC 源码<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly93d3cuYm9va3N0YWNrLmNuL3JlYWQvYnJwYy0xLjctemgvZmE2OTk0NGJjZTAwYjg5OS5tZA==">bRPC v1.7 中文文档 — bthread 机制<i class="fa fa-external-link-alt"></i></span></li>
+<li><span class="exturl" data-url="aHR0cHM6Ly93d3cuYm9vc3Qub3JnL2RvYy9saWJzL3JlbGVhc2UvbGlicy9jb250ZXh0Lw==">boost.context 文档<i class="fa fa-external-link-alt"></i></span></li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E5%8D%8F%E7%A8%8B/" rel="tag"># 协程</a>
+              <a href="/tags/brpc/" rel="tag"># brpc</a>
+              <a href="/tags/bthread/" rel="tag"># bthread</a>
+              <a href="/tags/%E7%94%A8%E6%88%B7%E6%80%81%E7%BA%BF%E7%A8%8B/" rel="tag"># 用户态线程</a>
+              <a href="/tags/%E4%B8%8A%E4%B8%8B%E6%96%87%E5%88%87%E6%8D%A2/" rel="tag"># 上下文切换</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/9d5b3554.html" rel="prev" title="Boost.Asio 异步网络编程详解">
+                  <i class="fa fa-angle-left"></i> Boost.Asio 异步网络编程详解
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/1c2ec8f7.html" rel="next" title="C++ 并发 LRU Cache 实现对比">
+                  C++ 并发 LRU Cache 实现对比 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

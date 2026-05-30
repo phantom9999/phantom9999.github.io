@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="简介本文总结一下tensorflow serving的模型加载策略，以及模型serving策略。 模型加载策略">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tfserving模型策略整理">
+<meta property="og:url" content="https://phantom9999.github.io/posts/ad28feb4.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="简介本文总结一下tensorflow serving的模型加载策略，以及模型serving策略。 模型加载策略">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-06-14T22:46:14.000Z">
+<meta property="article:modified_time" content="2022-06-14T22:46:14.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="model">
+<meta property="article:tag" content="serving">
+<meta property="article:tag" content="tensorflow">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/ad28feb4.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/ad28feb4.html","path":"posts/ad28feb4.html","title":"tfserving模型策略整理"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>tfserving模型策略整理 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8B%E5%8A%A0%E8%BD%BD%E7%AD%96%E7%95%A5"><span class="nav-number">2.</span> <span class="nav-text">模型加载策略</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A8%A1%E5%9E%8Bserving%E7%AD%96%E7%95%A5"><span class="nav-number">3.</span> <span class="nav-text">模型serving策略</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/ad28feb4.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="tfserving模型策略整理 | phantom9999的博客">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          tfserving模型策略整理
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-06-14 22:46:14" itemprop="dateCreated datePublished" datetime="2022-06-14T22:46:14+00:00">2022-06-14</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/inference/" itemprop="url" rel="index"><span itemprop="name">inference</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>本文总结一下tensorflow serving的模型加载策略，以及模型serving策略。</p>
+<h1 id="模型加载策略"><a href="#模型加载策略" class="headerlink" title="模型加载策略"></a>模型加载策略</h1><p>tf-serving支持多平台、多模型、多版本，支持制定模型维度的加载策略。<br>这个策略配置在serving-1.15.0&#x2F;tensorflow_serving&#x2F;config&#x2F;model_server_config.proto中，字段如下:</p>
+<pre class="line-numbers language-protobuf" data-language="protobuf"><code class="language-protobuf"><span class="token comment">// Version policy for the model indicating which version(s) of the model to</span>
+<span class="token comment">// load and make available for serving simultaneously.</span>
+<span class="token comment">// The default option is to serve only the latest version of the model.</span>
+<span class="token comment">//</span>
+<span class="token comment">// (This can be changed once a model is in serving.)</span>
+<span class="token positional-class-name class-name">FileSystemStoragePathSourceConfig<span class="token punctuation">.</span>ServableVersionPolicy</span> model_version_policy <span class="token operator">=</span> <span class="token number">7</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>这个字段的定义在serving-1.15.0&#x2F;tensorflow_serving&#x2F;sources&#x2F;storage_path&#x2F;file_system_storage_path_source.proto中，内容如下:</p>
+<pre class="line-numbers language-protobuf" data-language="protobuf"><code class="language-protobuf"><span class="token comment">// A policy that dictates which version(s) of a servable should be served.</span>
+<span class="token keyword">message</span> <span class="token class-name">ServableVersionPolicy</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// Serve the latest versions (i.e. the ones with the highest version</span>
+    <span class="token comment">// numbers), among those found on disk.</span>
+    <span class="token comment">//</span>
+    <span class="token comment">// This is the default policy, with the default number of versions as 1.</span>
+    <span class="token keyword">message</span> <span class="token class-name">Latest</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// Number of latest versions to serve. (The default is 1.)</span>
+        <span class="token builtin">uint32</span> num_versions <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// Serve all versions found on disk.</span>
+    <span class="token keyword">message</span> <span class="token class-name">All</span> <span class="token punctuation">&#123;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// Serve a specific version (or set of versions).</span>
+    <span class="token comment">//</span>
+    <span class="token comment">// This policy is useful for rolling back to a specific version, or for</span>
+    <span class="token comment">// canarying a specific version while still serving a separate stable</span>
+    <span class="token comment">// version.</span>
+    <span class="token keyword">message</span> <span class="token class-name">Specific</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// The version numbers to serve.</span>
+        <span class="token keyword">repeated</span> <span class="token builtin">int64</span> versions <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">oneof</span> policy_choice <span class="token punctuation">&#123;</span>
+        <span class="token positional-class-name class-name">Latest</span> latest <span class="token operator">=</span> <span class="token number">100</span><span class="token punctuation">;</span>
+        <span class="token positional-class-name class-name">All</span> all <span class="token operator">=</span> <span class="token number">101</span><span class="token punctuation">;</span>
+        <span class="token positional-class-name class-name">Specific</span> specific <span class="token operator">=</span> <span class="token number">102</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>末尾policy_choice中可以判断使用的是哪种:</p>
+<ul>
+<li>latest 表示只加载最新版本</li>
+<li>all 加载所有版本</li>
+<li>specific 指定版本(可以多个版本)</li>
+</ul>
+<p>除此之外，AspiredVersionsManager类有两种版本管理策略:</p>
+<ul>
+<li>AvailabilityPreservingPolicy 先加载新版本，后卸载老版本</li>
+<li>ResourcePreservingPolicy 先卸载老版本，后加载新版本</li>
+</ul>
+<h1 id="模型serving策略"><a href="#模型serving策略" class="headerlink" title="模型serving策略"></a>模型serving策略</h1><p>模型serving策略实际上是在加载策略基础上实现的。<br>在模型对应的配置中有字段version_labels，定义如下:</p>
+<pre class="line-numbers language-protobuf" data-language="protobuf"><code class="language-protobuf"><span class="token comment">// String labels to associate with versions of the model, allowing inference</span>
+<span class="token comment">// queries to refer to versions by label instead of number. Multiple labels</span>
+<span class="token comment">// can map to the same version, but not vice-versa.</span>
+<span class="token comment">//</span>
+<span class="token comment">// An envisioned use-case for these labels is canarying tentative versions.</span>
+<span class="token comment">// For example, one can assign labels "stable" and "canary" to two specific</span>
+<span class="token comment">// versions. Perhaps initially "stable" is assigned to version 0 and "canary"</span>
+<span class="token comment">// to version 1. Once version 1 passes canary, one can shift the "stable"</span>
+<span class="token comment">// label to refer to version 1 (at that point both labels map to the same</span>
+<span class="token comment">// version -- version 1 -- which is fine). Later once version 2 is ready to</span>
+<span class="token comment">// canary one can move the "canary" label to version 2. And so on.</span>
+<span class="token map class-name">map<span class="token punctuation">&lt;</span><span class="token builtin">string</span><span class="token punctuation">,</span> <span class="token builtin">int64</span><span class="token punctuation">></span></span> version_labels <span class="token operator">=</span> <span class="token number">8</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>这个字段可以指定版本的标签。</p>
+<p>接着在请求包有的model_spec字段中，可以指定版本或者指定标签，如下:</p>
+<pre class="line-numbers language-protobuf" data-language="protobuf"><code class="language-protobuf"><span class="token comment">// Metadata for an inference request such as the model name and version.</span>
+<span class="token keyword">message</span> <span class="token class-name">ModelSpec</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// Required servable name.</span>
+    <span class="token builtin">string</span> name <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// Optional choice of which version of the model to use.</span>
+    <span class="token comment">//</span>
+    <span class="token comment">// Recommended to be left unset in the common case. Should be specified only</span>
+    <span class="token comment">// when there is a strong version consistency requirement.</span>
+    <span class="token comment">//</span>
+    <span class="token comment">// When left unspecified, the system will serve the best available version.</span>
+    <span class="token comment">// This is typically the latest version, though during version transitions,</span>
+    <span class="token comment">// notably when serving on a fleet of instances, may be either the previous or</span>
+    <span class="token comment">// new version.</span>
+    <span class="token keyword">oneof</span> version_choice <span class="token punctuation">&#123;</span>
+        <span class="token comment">// Use this specific version number.</span>
+        <span class="token positional-class-name class-name">google<span class="token punctuation">.</span>protobuf<span class="token punctuation">.</span>Int64Value</span> version <span class="token operator">=</span> <span class="token number">2</span><span class="token punctuation">;</span>
+
+        <span class="token comment">// Use the version associated with the given label.</span>
+        <span class="token builtin">string</span> version_label <span class="token operator">=</span> <span class="token number">4</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token comment">// A named signature to evaluate. If unspecified, the default signature will</span>
+    <span class="token comment">// be used.</span>
+    <span class="token builtin">string</span> signature_name <span class="token operator">=</span> <span class="token number">3</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>serving服务处理请求时，根据version_choice的取值来选择版本，默认是选择最新版本，代码如下:</p>
+<pre class="line-numbers language-c++" data-language="c++"><code class="language-c++">switch (model_spec.version_choice_case()) &#123;
+    case ModelSpec::kVersion: &#123;
+        *servable_request &#x3D; ServableRequest::Specific(model_spec.name(), model_spec.version().value());
+        break;
+    &#125;
+    case ModelSpec::kVersionLabel: &#123;
+        if (!options_.allow_version_labels) &#123;
+            return errors::InvalidArgument(&quot;ModelSpec has &#39;version_label&#39; set, but it is not currently allowed by the server.&quot;);
+        &#125;
+        int64 version;
+        TF_RETURN_IF_ERROR(GetModelVersionForLabel(model_spec.name(), model_spec.version_label(), &amp;version));
+        *servable_request &#x3D; ServableRequest::Specific(model_spec.name(), version);
+        break;
+    &#125;
+    case ModelSpec::VERSION_CHOICE_NOT_SET: &#123;
+        *servable_request &#x3D; ServableRequest::Latest(model_spec.name());
+        break;
+    &#125;
+&#125;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>上面的模型选择需要与模型加载机制相配置，如果只加载了一个版本的模型，这时如果指定版本或者标签，就有可能找不到对应的模型，<br>这时就会返回标签不存在或者模型版本找不到的错误，然后请求失败，并没有兜底请求一说。</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/tensorflow/" rel="tag"># tensorflow</a>
+              <a href="/tags/serving/" rel="tag"># serving</a>
+              <a href="/tags/model/" rel="tag"># model</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/ef7468b9.html" rel="prev" title="tensorflow-serving--模型管理">
+                  <i class="fa fa-angle-left"></i> tensorflow-serving--模型管理
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/e1fa92aa.html" rel="next" title="tensorflow模型数据解析">
+                  tensorflow模型数据解析 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

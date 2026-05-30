@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="深入调研 claude-mem 的架构设计、核心工作流、MCP 搜索工具、知识代理系统以及内置记忆机制，全面解析如何为 Claude Code 赋予跨会话持久化记忆能力。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Claude Mem 深度调研：为 AI 编程助手装上持久化记忆">
+<meta property="og:url" content="https://phantom9999.github.io/posts/ebd7c5c3.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="深入调研 claude-mem 的架构设计、核心工作流、MCP 搜索工具、知识代理系统以及内置记忆机制，全面解析如何为 Claude Code 赋予跨会话持久化记忆能力。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-27T23:06:07.000Z">
+<meta property="article:modified_time" content="2026-05-27T23:06:07.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="agent">
+<meta property="article:tag" content="ai-memory">
+<meta property="article:tag" content="claude-code">
+<meta property="article:tag" content="claude-mem">
+<meta property="article:tag" content="mcp">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/ebd7c5c3.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/ebd7c5c3.html","path":"posts/ebd7c5c3.html","title":"Claude Mem 深度调研：为 AI 编程助手装上持久化记忆"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Claude Mem 深度调研：为 AI 编程助手装上持久化记忆 | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E7%AE%80%E4%BB%8B"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84"><span class="nav-number">2.</span> <span class="nav-text">核心架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-Worker-%E6%9C%8D%E5%8A%A1%EF%BC%88Bun-HTTP-Server%EF%BC%89"><span class="nav-number">2.1.</span> <span class="nav-text">1. Worker 服务（Bun HTTP Server）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-%E6%95%B0%E6%8D%AE%E5%BA%93%E5%B1%82%EF%BC%88SQLite-Chroma%EF%BC%89"><span class="nav-number">2.2.</span> <span class="nav-text">2. 数据库层（SQLite + Chroma）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-MCP-Server"><span class="nav-number">2.3.</span> <span class="nav-text">3. MCP Server</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-Hook-%E8%84%9A%E6%9C%AC%E7%B3%BB%E7%BB%9F"><span class="nav-number">2.4.</span> <span class="nav-text">4. Hook 脚本系统</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%BA%94%E5%A4%A7%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F-Hook"><span class="nav-number">3.</span> <span class="nav-text">五大生命周期 Hook</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Setup-Hook"><span class="nav-number">3.1.</span> <span class="nav-text">Setup Hook</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SessionStart-Hook"><span class="nav-number">3.2.</span> <span class="nav-text">SessionStart Hook</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#UserPromptSubmit-Hook"><span class="nav-number">3.3.</span> <span class="nav-text">UserPromptSubmit Hook</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PostToolUse-Hook"><span class="nav-number">3.4.</span> <span class="nav-text">PostToolUse Hook</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Stop-Hook"><span class="nav-number">3.5.</span> <span class="nav-text">Stop Hook</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PreToolUse-Hook%EF%BC%88Read-%E4%B8%93%E7%94%A8%EF%BC%89"><span class="nav-number">3.6.</span> <span class="nav-text">PreToolUse Hook（Read 专用）</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%A7%82%E5%AF%9F%EF%BC%88Observation%EF%BC%89%E7%94%9F%E6%88%90%E7%AE%A1%E7%BA%BF"><span class="nav-number">4.</span> <span class="nav-text">观察（Observation）生成管线</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#MCP-%E6%90%9C%E7%B4%A2%E5%B7%A5%E5%85%B7%EF%BC%9A3-%E5%B1%82%E9%80%92%E8%BF%9B%E5%BC%8F%E6%A3%80%E7%B4%A2"><span class="nav-number">5.</span> <span class="nav-text">MCP 搜索工具：3 层递进式检索</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#MCP-%E5%B7%A5%E5%85%B7%E6%B8%85%E5%8D%95"><span class="nav-number">5.1.</span> <span class="nav-text">MCP 工具清单</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%9F%BA%E7%A1%80%E6%90%9C%E7%B4%A2%E5%B7%A5%E5%85%B7%EF%BC%884-%E4%B8%AA%EF%BC%89"><span class="nav-number">5.1.1.</span> <span class="nav-text">基础搜索工具（4 个）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9F%A5%E8%AF%86%E4%BB%A3%E7%90%86%E5%B7%A5%E5%85%B7%EF%BC%886-%E4%B8%AA%EF%BC%8Cv12-1-0-%EF%BC%89"><span class="nav-number">5.1.2.</span> <span class="nav-text">知识代理工具（6 个，v12.1.0+）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%A7%82%E5%AF%9F%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7%EF%BC%883-%E4%B8%AA%EF%BC%89"><span class="nav-number">5.1.3.</span> <span class="nav-text">观察管理工具（3 个）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Tree-Sitter-AST-%E5%B7%A5%E5%85%B7%EF%BC%883-%E4%B8%AA%EF%BC%89"><span class="nav-number">5.1.4.</span> <span class="nav-text">Tree-Sitter AST 工具（3 个）</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#SKILL-%E4%BD%93%E7%B3%BB"><span class="nav-number">6.</span> <span class="nav-text">SKILL 体系</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E5%AE%89%E8%A3%85%E4%B8%8E%E9%85%8D%E7%BD%AE"><span class="nav-number">7.</span> <span class="nav-text">安装与配置</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E8%A1%8C%E5%91%BD%E4%BB%A4%E5%AE%89%E8%A3%85"><span class="nav-number">7.1.</span> <span class="nav-text">一行命令安装</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E9%85%8D%E7%BD%AE%E9%A1%B9"><span class="nav-number">7.2.</span> <span class="nav-text">关键配置项</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%94%AF%E6%8C%81-13-%E7%A7%8D-IDE"><span class="nav-number">7.3.</span> <span class="nav-text">支持 13 种 IDE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E9%9A%90%E7%A7%81%E4%B8%8E%E5%A4%9A%E8%AF%AD%E8%A8%80"><span class="nav-number">8.</span> <span class="nav-text">隐私与多语言</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%9A%90%E7%A7%81%E4%BF%9D%E6%8A%A4"><span class="nav-number">8.1.</span> <span class="nav-text">隐私保护</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%A4%9A%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%BC%8F"><span class="nav-number">8.2.</span> <span class="nav-text">多语言模式</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%8A%E4%B8%8B%E6%96%87%E6%B3%A8%E5%85%A5%E6%9C%BA%E5%88%B6"><span class="nav-number">9.</span> <span class="nav-text">上下文注入机制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B3%A8%E5%85%A5%E6%97%B6%E6%9C%BA"><span class="nav-number">9.1.</span> <span class="nav-text">注入时机</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B3%A8%E5%85%A5%E5%86%85%E5%AE%B9"><span class="nav-number">9.2.</span> <span class="nav-text">注入内容</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8"><span class="nav-number">9.3.</span> <span class="nav-text">快速入门</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Claude-Code-%E5%86%85%E7%BD%AE%E8%AE%B0%E5%BF%86%E7%B3%BB%E7%BB%9F"><span class="nav-number">10.</span> <span class="nav-text">Claude Code 内置记忆系统</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86"><span class="nav-number">10.1.</span> <span class="nav-text">工作原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E9%99%90%E5%88%B6"><span class="nav-number">10.2.</span> <span class="nav-text">关键限制</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%8E%E5%90%8C%E7%B1%BB%E6%96%B9%E6%A1%88%E5%AF%B9%E6%AF%94"><span class="nav-number">11.</span> <span class="nav-text">与同类方案对比</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#claude-mem-vs-claude-mem-lite"><span class="nav-number">11.1.</span> <span class="nav-text">claude-mem vs claude-mem-lite</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#claude-mem-vs-memsearch%EF%BC%88Zilliz-Milvus%EF%BC%89"><span class="nav-number">11.2.</span> <span class="nav-text">claude-mem vs memsearch（Zilliz&#x2F;Milvus）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#claude-mem-vs-mem0"><span class="nav-number">11.3.</span> <span class="nav-text">claude-mem vs mem0</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%8A%80%E6%9C%AF%E6%A0%88%E6%80%BB%E8%A7%88"><span class="nav-number">12.</span> <span class="nav-text">技术栈总览</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">总结</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/ebd7c5c3.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Claude Mem 深度调研：为 AI 编程助手装上持久化记忆 | phantom9999的博客">
+      <meta itemprop="description" content="深入调研 claude-mem 的架构设计、核心工作流、MCP 搜索工具、知识代理系统以及内置记忆机制，全面解析如何为 Claude Code 赋予跨会话持久化记忆能力。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Claude Mem 深度调研：为 AI 编程助手装上持久化记忆
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2026-05-27 23:06:07" itemprop="dateCreated datePublished" datetime="2026-05-27T23:06:07+00:00">2026-05-27</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/ai/" itemprop="url" rel="index"><span itemprop="name">ai</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">深入调研 claude-mem 的架构设计、核心工作流、MCP 搜索工具、知识代理系统以及内置记忆机制，全面解析如何为 Claude Code 赋予跨会话持久化记忆能力。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p>Claude Code 默认是<strong>无状态</strong>的——每次新会话都从零开始，你需要重新解释项目结构、代码规范和历史决策。这就像每次上班都要重新入职一样低效。</p>
+<p><strong>claude-mem</strong> 由 Alex Newman（@thedotmack）于 2025 年 8 月创建，是一个为 Claude Code 等 AI 编程助手提供<strong>跨会话持久化记忆</strong>的开源系统。GitHub 斩获 74000+ Star，目前最新版本 v13.3.0（2026 年 5 月）。</p>
+<p>它解决的核心问题是：<strong>让 AI 记住每一次编码会话的关键决策、Bug 修复和技术发现，并在未来的会话中自动注入相关上下文</strong>。</p>
+<h1 id="核心架构"><a href="#核心架构" class="headerlink" title="核心架构"></a>核心架构</h1><p>claude-mem 由四大核心组件构成：</p>
+<pre class="line-numbers language-none"><code class="language-none">[会话行为流] → [记忆引擎] → [压缩存储] → [上下文注入]<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<h2 id="1-Worker-服务（Bun-HTTP-Server）"><a href="#1-Worker-服务（Bun-HTTP-Server）" class="headerlink" title="1. Worker 服务（Bun HTTP Server）"></a>1. Worker 服务（Bun HTTP Server）</h2><p>基于 Bun 运行时的高性能 HTTP 服务，默认监听 <code>127.0.0.1:37777</code>，负责：</p>
+<ul>
+<li>接收来自 Hook 脚本的事件数据</li>
+<li>管理 SQLite 数据库读写</li>
+<li>调用 AI 模型进行观察压缩和摘要生成</li>
+<li>提供 Web UI 实时查看记忆流</li>
+<li>提供 REST API 供外部查询</li>
+</ul>
+<h2 id="2-数据库层（SQLite-Chroma）"><a href="#2-数据库层（SQLite-Chroma）" class="headerlink" title="2. 数据库层（SQLite + Chroma）"></a>2. 数据库层（SQLite + Chroma）</h2><p>采用<strong>混合存储</strong>策略：</p>
+<ul>
+<li><strong>SQLite（WAL 模式）</strong>：存储会话、观察记录、摘要的结构化数据，启用 FTS5 全文搜索</li>
+<li><strong>Chroma 向量数据库</strong>：存储语义向量，支持相似度搜索</li>
+<li>所有数据存储在 <code>~/.claude-mem/</code> 目录下，不离开本机</li>
+</ul>
+<p>核心数据表：</p>
+<table>
+<thead>
+<tr>
+<th>表名</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sdk_sessions</code></td>
+<td>会话记录，含项目名、平台来源、状态</td>
+</tr>
+<tr>
+<td><code>observations</code></td>
+<td>每次工具调用的观察记录</td>
+</tr>
+<tr>
+<td><code>session_summaries</code></td>
+<td>会话结束后的 AI 生成摘要</td>
+</tr>
+</tbody></table>
+<h2 id="3-MCP-Server"><a href="#3-MCP-Server" class="headerlink" title="3. MCP Server"></a>3. MCP Server</h2><p>一个轻量级包装层（<code>mcp-server.cjs</code>），将 MCP 协议翻译为 Worker 的 HTTP API 调用，向 Claude Code 暴露搜索、时间线、详情获取等工具。</p>
+<h2 id="4-Hook-脚本系统"><a href="#4-Hook-脚本系统" class="headerlink" title="4. Hook 脚本系统"></a>4. Hook 脚本系统</h2><p>通过 Claude Code 的 Hook 机制注册到五个生命周期节点。</p>
+<h1 id="五大生命周期-Hook"><a href="#五大生命周期-Hook" class="headerlink" title="五大生命周期 Hook"></a>五大生命周期 Hook</h1><p>claude-mem 在 Claude Code 的每个关键节点注入逻辑，形成完整的「感知-记录-总结-注入」闭环：</p>
+<h2 id="Setup-Hook"><a href="#Setup-Hook" class="headerlink" title="Setup Hook"></a>Setup Hook</h2><p>在 Claude Code 启动时触发，执行版本检查和插件自检，确保组件就绪。</p>
+<h2 id="SessionStart-Hook"><a href="#SessionStart-Hook" class="headerlink" title="SessionStart Hook"></a>SessionStart Hook</h2><p>匹配事件：<code>startup</code>、<code>clear</code>、<code>compact</code></p>
+<p>执行两个关键任务：</p>
+<ol>
+<li><strong>启动 Worker 服务</strong>：通过 <code>bun-runner.js</code> 拉起 Worker 进程</li>
+<li><strong>注入历史上下文</strong>：调用 <code>context-generator.cjs</code>，从数据库中检索当前项目的相关历史观察，注入到当前会话的 prompt 中</li>
+</ol>
+<h2 id="UserPromptSubmit-Hook"><a href="#UserPromptSubmit-Hook" class="headerlink" title="UserPromptSubmit Hook"></a>UserPromptSubmit Hook</h2><p>用户每次提交 prompt 时触发，执行会话初始化，确保当前会话在数据库中被正确追踪。</p>
+<h2 id="PostToolUse-Hook"><a href="#PostToolUse-Hook" class="headerlink" title="PostToolUse Hook"></a>PostToolUse Hook</h2><p><strong>最核心的 Hook</strong>，匹配所有工具调用（<code>*</code>）。每次 Claude 执行 Read、Edit、Bash、Grep 等工具后：</p>
+<ol>
+<li>捕获工具名称、参数和结果</li>
+<li>格式化为结构化观察记录</li>
+<li>发送到 Worker 服务进行存储</li>
+<li>触发 AI 压缩（去噪、提取关键信息）</li>
+</ol>
+<h2 id="Stop-Hook"><a href="#Stop-Hook" class="headerlink" title="Stop Hook"></a>Stop Hook</h2><p>会话结束时触发，调用 Worker 的 summarize 接口，由 AI 模型生成结构化摘要，包含：</p>
+<ul>
+<li><code>request</code>：用户的请求</li>
+<li><code>investigated</code>：调研的内容</li>
+<li><code>learned</code>：学到的知识</li>
+<li><code>completed</code>：完成的工作</li>
+<li><code>next_steps</code>：下一步计划</li>
+<li><code>files_read</code> &#x2F; <code>files_edited</code>：涉及的文件</li>
+</ul>
+<h2 id="PreToolUse-Hook（Read-专用）"><a href="#PreToolUse-Hook（Read-专用）" class="headerlink" title="PreToolUse Hook（Read 专用）"></a>PreToolUse Hook（Read 专用）</h2><p>在 Claude 读取文件之前触发，将文件上下文信息发送给 Worker，用于丰富记忆的关联性。</p>
+<h1 id="观察（Observation）生成管线"><a href="#观察（Observation）生成管线" class="headerlink" title="观察（Observation）生成管线"></a>观察（Observation）生成管线</h1><p>claude-mem v13.1.0 引入了 server-beta 事件管线，将观察生成升级为完整的生产级管道：</p>
+<pre class="line-numbers language-none"><code class="language-none">Agent Event → Outbox → BullMQ Worker → Observation Row<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>关键特性：</p>
+<ul>
+<li><strong>幂等入队</strong>：request-id 端到端传播，保证不重复</li>
+<li><strong>三 AI 提供商支持</strong>：Anthropic、OpenAI、Google，可按团队&#x2F;项目配置</li>
+<li><strong>生成任务重试&#x2F;取消</strong>：支持失败重试和手动取消</li>
+<li><strong>结构化审计日志</strong>：完整的操作追踪</li>
+</ul>
+<h1 id="MCP-搜索工具：3-层递进式检索"><a href="#MCP-搜索工具：3-层递进式检索" class="headerlink" title="MCP 搜索工具：3 层递进式检索"></a>MCP 搜索工具：3 层递进式检索</h1><p>claude-mem 的 MCP 搜索设计是其标志性特性，通过<strong>递进式信息披露</strong>节省约 10 倍 Token：</p>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>工具</th>
+<th>返回内容</th>
+<th>Token 成本</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>第一层</strong></td>
+<td><code>search</code></td>
+<td>索引摘要（ID、时间戳、类型、标题）</td>
+<td>~50-100&#x2F;条</td>
+</tr>
+<tr>
+<td><strong>第二层</strong></td>
+<td><code>timeline</code></td>
+<td>围绕指定观察的时间线上下文</td>
+<td>可变</td>
+</tr>
+<tr>
+<td><strong>第三层</strong></td>
+<td><code>get_observations</code></td>
+<td>完整观察详情</td>
+<td>~500-1000&#x2F;条</td>
+</tr>
+</tbody></table>
+<p>核心原则：<strong>永远不要在筛选之前获取完整详情</strong>。</p>
+<h2 id="MCP-工具清单"><a href="#MCP-工具清单" class="headerlink" title="MCP 工具清单"></a>MCP 工具清单</h2><h3 id="基础搜索工具（4-个）"><a href="#基础搜索工具（4-个）" class="headerlink" title="基础搜索工具（4 个）"></a>基础搜索工具（4 个）</h3><table>
+<thead>
+<tr>
+<th>工具</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>search</code></td>
+<td>全文搜索 + 语义搜索，支持按项目、类型、日期过滤</td>
+</tr>
+<tr>
+<td><code>timeline</code></td>
+<td>获取指定观察的前后时序上下文</td>
+</tr>
+<tr>
+<td><code>get_observations</code></td>
+<td>批量获取观察完整详情</td>
+</tr>
+<tr>
+<td><code>observation_search</code></td>
+<td>基于 GIN 倒排索引的 PostgreSQL 全文搜索（server-beta）</td>
+</tr>
+</tbody></table>
+<h3 id="知识代理工具（6-个，v12-1-0-）"><a href="#知识代理工具（6-个，v12-1-0-）" class="headerlink" title="知识代理工具（6 个，v12.1.0+）"></a>知识代理工具（6 个，v12.1.0+）</h3><table>
+<thead>
+<tr>
+<th>工具</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>build_corpus</code></td>
+<td>从观察历史编译过滤后的语料库</td>
+</tr>
+<tr>
+<td><code>list_corpora</code></td>
+<td>列出所有已构建的语料库</td>
+</tr>
+<tr>
+<td><code>prime_corpus</code></td>
+<td>将语料库加载到 AI 会话中</td>
+</tr>
+<tr>
+<td><code>query_corpus</code></td>
+<td>对已加载的语料库进行对话式查询</td>
+</tr>
+<tr>
+<td><code>rebuild_corpus</code></td>
+<td>用新数据重建语料库</td>
+</tr>
+<tr>
+<td><code>reprime_corpus</code></td>
+<td>刷新过期的语料库会话</td>
+</tr>
+</tbody></table>
+<h3 id="观察管理工具（3-个）"><a href="#观察管理工具（3-个）" class="headerlink" title="观察管理工具（3 个）"></a>观察管理工具（3 个）</h3><table>
+<thead>
+<tr>
+<th>工具</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>observation_add</code></td>
+<td>手动插入观察记录</td>
+</tr>
+<tr>
+<td><code>observation_context</code></td>
+<td>获取与查询相关的前 N 条观察的上下文注入文本</td>
+</tr>
+<tr>
+<td><code>observation_record_event</code></td>
+<td>记录 Agent 事件，触发生成任务</td>
+</tr>
+</tbody></table>
+<h3 id="Tree-Sitter-AST-工具（3-个）"><a href="#Tree-Sitter-AST-工具（3-个）" class="headerlink" title="Tree-Sitter AST 工具（3 个）"></a>Tree-Sitter AST 工具（3 个）</h3><table>
+<thead>
+<tr>
+<th>工具</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>smart_search</code></td>
+<td>基于 AST 解析的结构化代码搜索，替代 Grep&#x2F;Glob&#x2F;Read 发现循环</td>
+</tr>
+<tr>
+<td><code>smart_outline</code></td>
+<td>获取文件的结构骨架（所有符号及其签名）</td>
+</tr>
+<tr>
+<td><code>smart_unfold</code></td>
+<td>展开特定符号（函数、类、方法）的完整源码</td>
+</tr>
+</tbody></table>
+<p>支持 20+ 语言（Python、JavaScript、TypeScript、Go、Rust、C&#x2F;C++、Java、Ruby、Swift、Kotlin、PHP、Scala、Bash、Haskell、Zig、CSS&#x2F;SCSS、TOML、YAML、SQL、Markdown、Lua、Elixir）。</p>
+<h1 id="SKILL-体系"><a href="#SKILL-体系" class="headerlink" title="SKILL 体系"></a>SKILL 体系</h1><p>claude-mem 内置了 15 个 SKILL（可调用的子代理），覆盖开发全流程：</p>
+<table>
+<thead>
+<tr>
+<th>SKILL</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>do</code></td>
+<td>编排子代理执行分阶段实施计划</td>
+</tr>
+<tr>
+<td><code>make-plan</code></td>
+<td>创建 LLM 友好的分阶段实施计划</td>
+</tr>
+<tr>
+<td><code>mem-search</code></td>
+<td>跨会话搜索历史工作记录</td>
+</tr>
+<tr>
+<td><code>smart-explore</code></td>
+<td>使用 AST 解析进行低 Token 代码探索</td>
+</tr>
+<tr>
+<td><code>learn-codebase</code></td>
+<td>系统性地通读整个代码库</td>
+</tr>
+<tr>
+<td><code>knowledge-agent</code></td>
+<td>构建和查询基于记忆的 AI 知识库</td>
+</tr>
+<tr>
+<td><code>design-is</code></td>
+<td>基于 Dieter Rams 十大设计原则审核设计</td>
+</tr>
+<tr>
+<td><code>timeline-report</code></td>
+<td>生成项目完整开发历史的叙事报告</td>
+</tr>
+<tr>
+<td><code>weekly-digests</code></td>
+<td>生成按周划分的串行叙事摘要</td>
+</tr>
+<tr>
+<td><code>oh-my-issues</code></td>
+<td>将 Issue 堆积分类为根因集群</td>
+</tr>
+<tr>
+<td><code>babysit</code></td>
+<td>监控 PR 评审循环直到可合并</td>
+</tr>
+<tr>
+<td><code>pathfinder</code></td>
+<td>将代码库映射为功能分组的流程图</td>
+</tr>
+<tr>
+<td><code>version-bump</code></td>
+<td>语义化版本发布工作流</td>
+</tr>
+<tr>
+<td><code>wowerpoint</code></td>
+<td>将文档转化为分享式幻灯片 PDF</td>
+</tr>
+<tr>
+<td><code>how-it-works</code></td>
+<td>解释 claude-mem 的工作原理</td>
+</tr>
+</tbody></table>
+<h1 id="安装与配置"><a href="#安装与配置" class="headerlink" title="安装与配置"></a>安装与配置</h1><h2 id="一行命令安装"><a href="#一行命令安装" class="headerlink" title="一行命令安装"></a>一行命令安装</h2><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">npx claude-mem <span class="token function">install</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>或在 Claude Code 内部安装：</p>
+<pre class="line-numbers language-none"><code class="language-none">&#x2F;plugin marketplace add thedotmack&#x2F;claude-mem
+&#x2F;plugin install claude-mem<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+
+<h2 id="关键配置项"><a href="#关键配置项" class="headerlink" title="关键配置项"></a>关键配置项</h2><p>配置文件位于 <code>~/.claude-mem/settings.json</code>：</p>
+<table>
+<thead>
+<tr>
+<th>配置项</th>
+<th>默认值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CLAUDE_MEM_MODEL</code></td>
+<td><code>claude-sonnet-4-5</code></td>
+<td>用于观察压缩的模型</td>
+</tr>
+<tr>
+<td><code>CLAUDE_MEM_WORKER_PORT</code></td>
+<td><code>37777</code></td>
+<td>Worker HTTP 服务端口</td>
+</tr>
+<tr>
+<td><code>CLAUDE_MEM_WORKER_HOST</code></td>
+<td><code>127.0.0.1</code></td>
+<td>Worker 绑定地址</td>
+</tr>
+<tr>
+<td><code>CLAUDE_MEM_PROVIDER</code></td>
+<td><code>claude</code></td>
+<td>AI 提供商（claude&#x2F;openrouter&#x2F;gemini）</td>
+</tr>
+<tr>
+<td><code>CLAUDE_MEM_CONTEXT_OBSERVATIONS</code></td>
+<td><code>50</code></td>
+<td>上下文注入的最大观察数</td>
+</tr>
+<tr>
+<td><code>CLAUDE_MEM_LOG_LEVEL</code></td>
+<td><code>INFO</code></td>
+<td>日志级别</td>
+</tr>
+<tr>
+<td><code>CLAUDE_MEM_MODE</code></td>
+<td><code>code</code></td>
+<td>语言模式（code&#x2F;code–zh&#x2F;code–ja）</td>
+</tr>
+<tr>
+<td><code>CLAUDE_MEM_DATA_DIR</code></td>
+<td><code>~/.claude-mem</code></td>
+<td>数据存储目录</td>
+</tr>
+</tbody></table>
+<h2 id="支持-13-种-IDE"><a href="#支持-13-种-IDE" class="headerlink" title="支持 13 种 IDE"></a>支持 13 种 IDE</h2><p>Claude Code、Gemini CLI、OpenCode、Windsurf、OpenClaw、Codex CLI、Copilot CLI、Antigravity、Goose、Crush、Roo Code、Warp、Cursor。</p>
+<h1 id="隐私与多语言"><a href="#隐私与多语言" class="headerlink" title="隐私与多语言"></a>隐私与多语言</h1><h2 id="隐私保护"><a href="#隐私保护" class="headerlink" title="隐私保护"></a>隐私保护</h2><ul>
+<li>所有数据存储在本地 <code>~/.claude-mem/</code>，不离开本机</li>
+<li>仅 AI 压缩调用会发送数据到配置的 AI 提供商</li>
+<li>用 <code>&lt;private&gt;...&lt;/private&gt;</code> 标签包裹敏感内容，系统会自动排除</li>
+<li><code>npx claude-mem uninstall</code> 彻底清除所有数据</li>
+</ul>
+<h2 id="多语言模式"><a href="#多语言模式" class="headerlink" title="多语言模式"></a>多语言模式</h2><p>内置三种语言模式：</p>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>语言</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>code</code></td>
+<td>英文</td>
+</tr>
+<tr>
+<td><code>code--zh</code></td>
+<td>中文</td>
+</tr>
+<tr>
+<td><code>code--ja</code></td>
+<td>日文</td>
+</tr>
+</tbody></table>
+<p>通过 <code>CLAUDE_MEM_MODE</code> 配置项切换。</p>
+<h1 id="上下文注入机制"><a href="#上下文注入机制" class="headerlink" title="上下文注入机制"></a>上下文注入机制</h1><h2 id="注入时机"><a href="#注入时机" class="headerlink" title="注入时机"></a>注入时机</h2><p>记忆注入从<strong>第二个会话</strong>开始生效。第一个会话在项目中播种记忆，后续会话自动注入过去相关工作的上下文。</p>
+<h2 id="注入内容"><a href="#注入内容" class="headerlink" title="注入内容"></a>注入内容</h2><p>每次 SessionStart 时，context-generator 从数据库检索：</p>
+<ol>
+<li><strong>最近会话摘要</strong>（最近 N 个会话的完成内容）</li>
+<li><strong>相关历史观察</strong>（基于项目名和语义相似度）</li>
+<li><strong>Token 节省统计</strong>（展示记忆系统的压缩效率）</li>
+</ol>
+<p>注入到 CLAUDE.md 和 stdout，Claude 无需调用任何工具即可获得历史上下文。</p>
+<h2 id="快速入门"><a href="#快速入门" class="headerlink" title="快速入门"></a>快速入门</h2><p>运行 <code>/learn-codebase</code> 可在单次遍历中（约 5 分钟）将整个代码库前端加载到记忆中。</p>
+<h1 id="Claude-Code-内置记忆系统"><a href="#Claude-Code-内置记忆系统" class="headerlink" title="Claude Code 内置记忆系统"></a>Claude Code 内置记忆系统</h1><p>Claude Code v2.1.x 起内置了一套<strong>未公开的自动记忆系统</strong>，与 claude-mem 并存：</p>
+<h2 id="工作原理"><a href="#工作原理" class="headerlink" title="工作原理"></a>工作原理</h2><ul>
+<li><strong>存储格式</strong>：纯 Markdown 文件，位于 <code>~/.claude/projects/&lt;项目编码&gt;/memory/</code></li>
+<li><strong>索引文件</strong>：<code>MEMORY.md</code>，<strong>每个会话自动加载到系统提示词中</strong></li>
+<li><strong>四种记忆类型</strong>：User（用户偏好）、Feedback（反馈指导）、Project（项目上下文）、Reference（外部资源指针）</li>
+<li><strong>后台提取</strong>：一个 <code>extract-memories</code> 子代理在会话结束后自动运行，提取关键洞察</li>
+</ul>
+<h2 id="关键限制"><a href="#关键限制" class="headerlink" title="关键限制"></a>关键限制</h2><ul>
+<li><strong>200 行硬上限</strong>：<code>MEMORY.md</code> 超过 200 行后，旧条目<strong>静默截断</strong></li>
+<li><strong>25KB 字节上限</strong>：作为次要限制</li>
+<li><strong>每回合最多 5 个记忆文件</strong></li>
+<li><strong>无向量搜索</strong>：通过独立的 Claude Sonnet 侧调用来扫描文件名&#x2F;描述以选取相关文件</li>
+<li><strong>陈旧度警告</strong>：超过 1 天的记忆会被注入陈旧度警告</li>
+</ul>
+<blockquote>
+<p>静默遗忘是最危险的——Claude 无法知道记忆被截断，可能导致重复犯错、与之前的架构决策矛盾、反复询问偏好。</p>
+</blockquote>
+<h1 id="与同类方案对比"><a href="#与同类方案对比" class="headerlink" title="与同类方案对比"></a>与同类方案对比</h1><h2 id="claude-mem-vs-claude-mem-lite"><a href="#claude-mem-vs-claude-mem-lite" class="headerlink" title="claude-mem vs claude-mem-lite"></a>claude-mem vs claude-mem-lite</h2><p>claude-mem-lite（@sdsrss &#x2F; @mingfeiqiao）是对原始 claude-mem 的轻量级重设计：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>claude-mem（原版）</th>
+<th>claude-mem-lite</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>LLM 调用方式</td>
+<td>每次工具调用触发 Sonnet</td>
+<td>仅在批量刷新时调用（5-10 条一批）</td>
+</tr>
+<tr>
+<td>每会话 Token 消耗</td>
+<td>~100K-250K</td>
+<td>~1K-4K</td>
+</tr>
+<tr>
+<td>成本</td>
+<td>基准</td>
+<td>低 50-100 倍，便宜 600 倍+</td>
+</tr>
+<tr>
+<td>运行时</td>
+<td>长驻 Worker（1.8MB）</td>
+<td>按需启动，立即退出</td>
+</tr>
+<tr>
+<td>依赖</td>
+<td>Bun + Python&#x2F;uv + Chroma</td>
+<td>仅 Node.js（3 个 npm 包）</td>
+</tr>
+<tr>
+<td>向量搜索</td>
+<td>ChromaDB（Python&#x2F;MCP）</td>
+<td>SQLite FTS5 + TF-IDF 余弦相似度</td>
+</tr>
+<tr>
+<td>噪音过滤</td>
+<td>LLM 判断</td>
+<td>确定性代码级过滤</td>
+</tr>
+</tbody></table>
+<p>claude-mem-lite 的设计哲学：<strong>先用代码过滤，只把重要内容发送给轻量模型</strong>。</p>
+<h2 id="claude-mem-vs-memsearch（Zilliz-Milvus）"><a href="#claude-mem-vs-memsearch（Zilliz-Milvus）" class="headerlink" title="claude-mem vs memsearch（Zilliz&#x2F;Milvus）"></a>claude-mem vs memsearch（Zilliz&#x2F;Milvus）</h2><table>
+<thead>
+<tr>
+<th>维度</th>
+<th>memsearch</th>
+<th>claude-mem</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>架构</td>
+<td>4 个 Shell Hook + 后台监听进程</td>
+<td>Node.js Worker + Express + React</td>
+</tr>
+<tr>
+<td>存储</td>
+<td>纯 Markdown（每天一个文件）</td>
+<td>SQLite + Chroma</td>
+</tr>
+<tr>
+<td>召回方式</td>
+<td><strong>自动注入</strong>（Hook 触发语义搜索）</td>
+<td>Agent 驱动（手动调用工具）</td>
+</tr>
+<tr>
+<td>上下文开销</td>
+<td>零（无 MCP 工具定义）</td>
+<td>MCP 工具定义常驻</td>
+</tr>
+<tr>
+<td>向量索引</td>
+<td>Milvus（可从 Markdown 重建）</td>
+<td>Chroma</td>
+</tr>
+</tbody></table>
+<p>memsearch 的亮点在于<strong>零 Token 上下文开销</strong>——每次 <code>UserPromptSubmit</code> Hook 自动执行语义搜索并将 Top-3 结果注入 prompt，Claude 无需决定是否搜索，它直接获得上下文。</p>
+<h2 id="claude-mem-vs-mem0"><a href="#claude-mem-vs-mem0" class="headerlink" title="claude-mem vs mem0"></a>claude-mem vs mem0</h2><p>mem0（<code>mem0ai/mem0</code>）是面向生产环境的向量记忆层：</p>
+<ul>
+<li>完全基于嵌入向量的语义检索（无 200 行限制）</li>
+<li>无静默截断</li>
+<li>跨会话召回无需显式工具调用</li>
+<li>支持 Claude Code 和 Cowork 双平台</li>
+</ul>
+<h1 id="技术栈总览"><a href="#技术栈总览" class="headerlink" title="技术栈总览"></a>技术栈总览</h1><table>
+<thead>
+<tr>
+<th>组件</th>
+<th>技术选型</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>运行时</td>
+<td>Bun（Worker 服务）</td>
+</tr>
+<tr>
+<td>Web 框架</td>
+<td>Express</td>
+</tr>
+<tr>
+<td>数据库</td>
+<td>SQLite（WAL 模式 + FTS5）</td>
+</tr>
+<tr>
+<td>向量存储</td>
+<td>ChromaDB（Python&#x2F;uv 依赖）</td>
+</tr>
+<tr>
+<td>进程管理</td>
+<td>自研 PM2 风格管理器</td>
+</tr>
+<tr>
+<td>AI 压缩</td>
+<td>Anthropic Claude &#x2F; OpenAI &#x2F; Google Gemini</td>
+</tr>
+<tr>
+<td>前端 UI</td>
+<td>React（localhost:37777）</td>
+</tr>
+<tr>
+<td>代码分析</td>
+<td>Tree-sitter（20+ 语言支持）</td>
+</tr>
+<tr>
+<td>MCP 协议</td>
+<td>自研轻量包装层</td>
+</tr>
+<tr>
+<td>任务队列</td>
+<td>BullMQ（server-beta）</td>
+</tr>
+</tbody></table>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>claude-mem 通过 Hook 驱动的生命周期感知 + AI 压缩 + 混合向量检索，构建了一套完整的 AI 记忆系统。其核心价值在于：</p>
+<ol>
+<li><strong>上下文连续性</strong>：跨会话记住关键技术决策和 Bug 修复方案，避免重复踩坑</li>
+<li><strong>Token 经济性</strong>：3 层递进式检索在提供丰富上下文的同时将 Token 消耗控制到最低</li>
+<li><strong>开发生命周期全覆盖</strong>：从代码探索（smart-explore）→ 计划制定（make-plan）→ 执行实施（do）→ PR 审核（babysit）→ Issue 归并（oh-my-issues）→ 版本发布（version-bump），15 个 SKILL 构成完整的 AI 辅助开发工作流</li>
+<li><strong>隐私可控</strong>：数据本地化、敏感内容过滤、一键卸载</li>
+</ol>
+<p>局限也不容忽视——对 Chroma 的 Python 依赖增加了安装复杂度，每次工具调用的 LLM 压缩会导致较高的 API 成本，而 Claude Code 内置记忆系统的 200 行静默截断在项目规模增大时会成为瓶颈。</p>
+<p>选择合适的方案取决于具体需求：</p>
+<ul>
+<li>需要丰富功能和 UI → <strong>claude-mem 原版</strong></li>
+<li>追求低开销和简单 → <strong>claude-mem-lite</strong></li>
+<li>看重透明性和纯 Markdown → <strong>memsearch</strong></li>
+<li>生产级向量记忆 → <strong>mem0</strong></li>
+<li>零配置开箱即用 → <strong>Claude Code 内置记忆</strong>（注意 200 行限制）</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/claude-mem/" rel="tag"># claude-mem</a>
+              <a href="/tags/claude-code/" rel="tag"># claude-code</a>
+              <a href="/tags/ai-memory/" rel="tag"># ai-memory</a>
+              <a href="/tags/mcp/" rel="tag"># mcp</a>
+              <a href="/tags/agent/" rel="tag"># agent</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/1c2ec8f7.html" rel="prev" title="C++ 并发 LRU Cache 实现对比">
+                  <i class="fa fa-angle-left"></i> C++ 并发 LRU Cache 实现对比
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/8d3dcd9.html" rel="next" title="Planning with Files —— AI Agent 的持久化工作记忆">
+                  Planning with Files —— AI Agent 的持久化工作记忆 <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>

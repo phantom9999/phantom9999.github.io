@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.css" integrity="sha256-gkQVf8UKZgQ0HyuxL/VnacadJ+D2Kox2TCEBuNQg5+w=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"phantom9999.github.io","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.27.0","exturl":true,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-tomorrow"},"copy_button":{"enable":true,"style":null},"fold":{"enable":false,"height":500},"language":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.json","localsearch":{"enable":true,"top_n_per_article":1,"unescape":false,"preload":true}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="NV Embedding Cache SDK 高级主题深度解析 — 执行上下文、缓存管理、插入启发式策略、多设备分布式、线程池与分配器、AOTInductor C++ 部署。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="advanced-usage">
+<meta property="og:url" content="https://phantom9999.github.io/posts/b4c73ab2.html">
+<meta property="og:site_name" content="phantom9999的博客">
+<meta property="og:description" content="NV Embedding Cache SDK 高级主题深度解析 — 执行上下文、缓存管理、插入启发式策略、多设备分布式、线程池与分配器、AOTInductor C++ 部署。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-30T16:43:25.000Z">
+<meta property="article:modified_time" content="2026-05-30T16:43:25.000Z">
+<meta property="article:author" content="phantom9999">
+<meta property="article:tag" content="AOTInductor">
+<meta property="article:tag" content="CUDA">
+<meta property="article:tag" content="Embedding">
+<meta property="article:tag" content="NVEmbeddingCache">
+<meta property="article:tag" content="NVIDIA">
+<meta property="article:tag" content="PyTorch">
+<meta property="article:tag" content="多GPU">
+<meta property="article:tag" content="线程池">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="https://phantom9999.github.io/posts/b4c73ab2.html">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":"","permalink":"https://phantom9999.github.io/posts/b4c73ab2.html","path":"posts/b4c73ab2.html","title":"advanced-usage"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>advanced-usage | phantom9999的博客</title>
+  
+
+
+
+
+
+
+
+
+  
+  <script size="300" alpha="0.6" zIndex="-1" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.31/dist/fancybox/fancybox.umd.js" integrity="sha256-a+H7FYzJv6oU2hfsfDGM2Ohw/cR9v+hPfxHCLdmCrE8=" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lozad@1.16.0/dist/lozad.min.js" integrity="sha256-mOFREFhqmHeQbXpK2lp4nA3qooVgACfh88fpJftLBbc=" crossorigin="anonymous" defer></script>
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.5.0/dist/search.js" integrity="sha256-xFC6PJ82SL9b3WkGjFavNiA9gm5z6UBxWPiu4CYjptg=" crossorigin="anonymous" defer></script>
+<script src="/js/third-party/search/local-search.js" defer></script>
+
+
+
+
+  <script src="/js/third-party/fancybox.js" defer></script>
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">false</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js" defer></script>
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">phantom9999的博客</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="搜索" role="button">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-cpp开发"><a href="/categories/cpp-devel" rel="section"><i class="fa fa-university fa-fw"></i>cpp开发</a></li><li class="menu-item menu-item-模型推理"><a href="/categories/inference/" rel="section"><i class="fa fa-university fa-fw"></i>模型推理</a></li><li class="menu-item menu-item-ai辅助"><a href="/categories/ai/" rel="section"><i class="fa fa-university fa-fw"></i>AI辅助</a></li><li class="menu-item menu-item-随笔"><a href="/categories/essay" rel="section"><i class="fa fa-university fa-fw"></i>随笔</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">115</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">5</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">51</span></a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+      <div class="search-header">
+        <span class="search-icon">
+          <i class="fa fa-search"></i>
+        </span>
+        <div class="search-input-container">
+          <input autocomplete="off" autocapitalize="off" maxlength="80"
+                placeholder="搜索..." spellcheck="false"
+                type="search" class="search-input">
+        </div>
+        <span class="popup-btn-close" role="button">
+          <i class="fa fa-times-circle"></i>
+        </span>
+      </div>
+      <div class="search-result-container">
+        <div class="search-result-icon">
+          <i class="fa fa-spinner fa-pulse fa-5x"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E9%AB%98%E7%BA%A7%E4%B8%BB%E9%A2%98%E6%B7%B1%E5%BA%A6%E8%A7%A3%E6%9E%90"><span class="nav-number">1.</span> <span class="nav-text">高级主题深度解析</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E6%89%A7%E8%A1%8C%E4%B8%8A%E4%B8%8B%E6%96%87%EF%BC%88ExecutionContext%EF%BC%89"><span class="nav-number">1.1.</span> <span class="nav-text">一、执行上下文（ExecutionContext）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A6%82%E5%BF%B5"><span class="nav-number">1.1.1.</span> <span class="nav-text">概念</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%B1%BB%E5%B1%82%E6%AC%A1"><span class="nav-number">1.1.2.</span> <span class="nav-text">类层次</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%B8%E5%BF%83%E6%88%90%E5%91%98"><span class="nav-number">1.1.3.</span> <span class="nav-text">核心成员</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E5%AE%9E%E7%8E%B0%E7%BB%86%E8%8A%82"><span class="nav-number">1.1.4.</span> <span class="nav-text">关键实现细节</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BD%BF%E7%94%A8%E6%A8%A1%E5%BC%8F"><span class="nav-number">1.1.5.</span> <span class="nav-text">使用模式</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E3%80%81%E7%BC%93%E5%AD%98%E7%AE%A1%E7%90%86"><span class="nav-number">1.2.</span> <span class="nav-text">二、缓存管理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Modify-%E6%93%8D%E4%BD%9C%E4%B8%8E-ModifyContext"><span class="nav-number">1.2.1.</span> <span class="nav-text">Modify 操作与 ModifyContext</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Invalidate-and-Commit-%E8%8C%83%E5%BC%8F"><span class="nav-number">1.2.2.</span> <span class="nav-text">Invalidate and Commit 范式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Custom-Flow-API"><span class="nav-number">1.2.3.</span> <span class="nav-text">Custom Flow API</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B5%81%E5%90%8C%E6%AD%A5%E7%BB%86%E8%8A%82"><span class="nav-number">1.2.4.</span> <span class="nav-text">流同步细节</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E3%80%81%E6%8F%92%E5%85%A5%E5%90%AF%E5%8F%91%E5%BC%8F%E7%AD%96%E7%95%A5%EF%BC%88InsertHeuristic%EF%BC%89"><span class="nav-number">1.3.</span> <span class="nav-text">三、插入启发式策略（InsertHeuristic）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%8E%A5%E5%8F%A3"><span class="nav-number">1.3.1.</span> <span class="nav-text">接口</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DefaultInsertHeuristic"><span class="nav-number">1.3.2.</span> <span class="nav-text">DefaultInsertHeuristic</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#NeverInsertHeuristic"><span class="nav-number">1.3.3.</span> <span class="nav-text">NeverInsertHeuristic</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#FSMInsertHeuristic"><span class="nav-number">1.3.4.</span> <span class="nav-text">FSMInsertHeuristic</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#StatisticalInsertHeuristic"><span class="nav-number">1.3.5.</span> <span class="nav-text">StatisticalInsertHeuristic</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E3%80%81%E5%A4%9A%E8%AE%BE%E5%A4%87%E4%B8%8E%E5%88%86%E5%B8%83%E5%BC%8F%E6%94%AF%E6%8C%81"><span class="nav-number">1.4.</span> <span class="nav-text">四、多设备与分布式支持</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%9A-GPU-%E5%85%B1%E4%BA%AB%E7%BA%BF%E6%80%A7%E8%A1%A8"><span class="nav-number">1.4.1.</span> <span class="nav-text">多 GPU 共享线性表</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CUDADistributedBuffer%EF%BC%88%E5%A4%9A%E8%8A%82%E7%82%B9%EF%BC%89"><span class="nav-number">1.4.2.</span> <span class="nav-text">CUDADistributedBuffer（多节点）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DistributedEnv"><span class="nav-number">1.4.3.</span> <span class="nav-text">DistributedEnv</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E7%8E%B0%E7%BB%86%E8%8A%82%EF%BC%9ACUDA-Virtual-Memory"><span class="nav-number">1.4.4.</span> <span class="nav-text">实现细节：CUDA Virtual Memory</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%94%E3%80%81%E7%BA%BF%E7%A8%8B%E6%B1%A0%EF%BC%88ThreadPool%EF%BC%89"><span class="nav-number">1.5.</span> <span class="nav-text">五、线程池（ThreadPool）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%8E%A5%E5%8F%A3-1"><span class="nav-number">1.5.1.</span> <span class="nav-text">接口</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#SimpleThreadPool"><span class="nav-number">1.5.2.</span> <span class="nav-text">SimpleThreadPool</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BD%BF%E7%94%A8%E6%A8%A1%E5%BC%8F-1"><span class="nav-number">1.5.3.</span> <span class="nav-text">使用模式</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AD%E3%80%81%E5%88%86%E9%85%8D%E5%99%A8%EF%BC%88Allocator%EF%BC%89"><span class="nav-number">1.6.</span> <span class="nav-text">六、分配器（Allocator）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%8E%A5%E5%8F%A3-2"><span class="nav-number">1.6.1.</span> <span class="nav-text">接口</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DefaultAllocator"><span class="nav-number">1.6.2.</span> <span class="nav-text">DefaultAllocator</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%83%E3%80%81AOTInductor-C-%E9%83%A8%E7%BD%B2"><span class="nav-number">1.7.</span> <span class="nav-text">七、AOTInductor C++ 部署</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%8C%E6%95%B4%E6%B5%81%E7%A8%8B"><span class="nav-number">1.7.1.</span> <span class="nav-text">完整流程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9E%B6%E6%9E%84"><span class="nav-number">1.7.2.</span> <span class="nav-text">架构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E7%BB%84%E4%BB%B6"><span class="nav-number">1.7.3.</span> <span class="nav-text">关键组件</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%93%BE%E6%8E%A5%E8%A6%81%E6%B1%82"><span class="nav-number">1.7.4.</span> <span class="nav-text">链接要求</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AB%E3%80%81%E5%8F%AF%E6%8F%92%E6%8B%94%E7%BB%84%E4%BB%B6%E6%80%BB%E7%BB%93"><span class="nav-number">1.8.</span> <span class="nav-text">八、可插拔组件总结</span></a></li></ol></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">phantom9999</p>
+  <div class="site-description" itemprop="description">phantom9999的个人博客</div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">51</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">115</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <span class="exturl" data-url="aHR0cHM6Ly9naXRodWIuY29tL3BoYW50b205OTk5" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;phantom9999"><i class="fab fa-github fa-fw"></i>GitHub</span>
+      </span>
+  </div>
+
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://phantom9999.github.io/posts/b4c73ab2.html">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="phantom9999">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="phantom9999的博客">
+      <meta itemprop="description" content="phantom9999的个人博客">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="advanced-usage | phantom9999的博客">
+      <meta itemprop="description" content="NV Embedding Cache SDK 高级主题深度解析 — 执行上下文、缓存管理、插入启发式策略、多设备分布式、线程池与分配器、AOTInductor C++ 部署。">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          advanced-usage
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2026-05-30 16:43:25" itemprop="dateCreated datePublished" datetime="2026-05-30T16:43:25+00:00">2026-05-30</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/inference/" itemprop="url" rel="index"><span itemprop="name">inference</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">NV Embedding Cache SDK 高级主题深度解析 — 执行上下文、缓存管理、插入启发式策略、多设备分布式、线程池与分配器、AOTInductor C++ 部署。</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><h1 id="高级主题深度解析"><a href="#高级主题深度解析" class="headerlink" title="高级主题深度解析"></a>高级主题深度解析</h1><p>本文档对 NV Embedding Cache SDK 中的高级主题进行深度分析，涵盖执行上下文、缓存管理、插入启发式策略、多设备部署、线程池与分配器、AOTInductor C++ 部署等内容。每个主题先介绍概念，再结合源码分析实现细节。</p>
+<hr>
+<h2 id="一、执行上下文（ExecutionContext）"><a href="#一、执行上下文（ExecutionContext）" class="headerlink" title="一、执行上下文（ExecutionContext）"></a>一、执行上下文（ExecutionContext）</h2><h3 id="概念"><a href="#概念" class="headerlink" title="概念"></a>概念</h3><p>执行上下文（<code>ExecutionContext</code>）是 NVE 中管理 GPU 操作所需状态和资源的容器。每个上下文代表一个<strong>可重用的并行执行环境</strong>——持有独立的 CUDA 流对（lookup stream + modify stream）、临时缓冲区、线程池和分配器引用。应用应创建固定数量的上下文，在初始化时完成分配，然后在运行时以轮询等方式循环使用。</p>
+<h3 id="类层次"><a href="#类层次" class="headerlink" title="类层次"></a>类层次</h3><pre class="line-numbers language-none"><code class="language-none">ExecutionContext  (基类, include&#x2F;execution_context.hpp)
+  ├── GPUEmbeddingTableExecutionContext  (GPUEmbeddingLayer 专用)
+  ├── GPUTableExecutionContext           (GpuTable 专用)
+  └── HostTableExecutionContext           (HostTable 专用)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="核心成员"><a href="#核心成员" class="headerlink" title="核心成员"></a>核心成员</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">ExecutionContext</span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">protected</span><span class="token operator">:</span>
+    cudaStream_t lookup_stream_<span class="token punctuation">;</span>     <span class="token comment">// 查找操作流</span>
+    cudaStream_t modify_stream_<span class="token punctuation">;</span>     <span class="token comment">// 修改操作流</span>
+    thread_pool_ptr_t thread_pool_<span class="token punctuation">;</span>  <span class="token comment">// CPU 线程池引用</span>
+    allocator_ptr_t allocator_<span class="token punctuation">;</span>      <span class="token comment">// 内存分配器引用</span>
+    std<span class="token double-colon punctuation">::</span>unordered_map<span class="token operator">&lt;</span>std<span class="token double-colon punctuation">::</span>string<span class="token punctuation">,</span> std<span class="token double-colon punctuation">::</span>shared_ptr<span class="token operator">&lt;</span>ResizeableBuffer<span class="token operator">>></span> buffer_storage_<span class="token punctuation">;</span>
+    <span class="token comment">// 按名称索引的临时缓冲区池</span>
+    std<span class="token double-colon punctuation">::</span>unordered_map<span class="token operator">&lt;</span>std<span class="token double-colon punctuation">::</span>string<span class="token punctuation">,</span> std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span>cudaStream_t<span class="token operator">>></span> aux_streams_storage_<span class="token punctuation">;</span>
+    <span class="token comment">// 辅助 CUDA 流</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="关键实现细节"><a href="#关键实现细节" class="headerlink" title="关键实现细节"></a>关键实现细节</h3><p><strong><code>get_buffer()</code> — 懒分配临时缓冲区</strong></p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">void</span><span class="token operator">*</span> <span class="token class-name">ExecutionContext</span><span class="token double-colon punctuation">::</span><span class="token function">get_buffer</span><span class="token punctuation">(</span><span class="token keyword">const</span> std<span class="token double-colon punctuation">::</span>string<span class="token operator">&amp;</span> name<span class="token punctuation">,</span> size_t size<span class="token punctuation">,</span> <span class="token keyword">bool</span> host_alloc<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">auto</span> internal_name <span class="token operator">=</span> <span class="token function">internal_name</span><span class="token punctuation">(</span>name<span class="token punctuation">,</span> host_alloc<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">auto</span> it <span class="token operator">=</span> buffer_storage_<span class="token punctuation">.</span><span class="token function">find</span><span class="token punctuation">(</span>internal_name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>it <span class="token operator">==</span> buffer_storage_<span class="token punctuation">.</span><span class="token function">end</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token comment">// 按需分配，下次同名的 get_buffer 直接复用</span>
+        <span class="token keyword">auto</span> buf <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>ResizeableBuffer<span class="token operator">></span></span></span><span class="token punctuation">(</span>size<span class="token punctuation">,</span> host_alloc<span class="token punctuation">,</span> allocator_<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        buffer_storage_<span class="token punctuation">.</span><span class="token function">emplace</span><span class="token punctuation">(</span>internal_name<span class="token punctuation">,</span> buf<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">return</span> buf<span class="token operator">-></span><span class="token function">data</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token comment">// 已存在则确保容量足够</span>
+    it<span class="token operator">-></span>second<span class="token operator">-></span><span class="token function">reserve</span><span class="token punctuation">(</span>size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> it<span class="token operator">-></span>second<span class="token operator">-></span><span class="token function">data</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>ResizeableBuffer</code> 按需增长，但不会自动缩小。因此首次用到某个大尺寸操作时会触发分配，后续同尺寸操作复用已分配内存。</p>
+<p><strong><code>get_aux_streams()</code> — 辅助流</strong></p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span>cudaStream_t<span class="token operator">></span> <span class="token class-name">ExecutionContext</span><span class="token double-colon punctuation">::</span><span class="token function">get_aux_streams</span><span class="token punctuation">(</span>
+    <span class="token keyword">const</span> std<span class="token double-colon punctuation">::</span>string<span class="token operator">&amp;</span> name<span class="token punctuation">,</span> size_t num_streams<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">auto</span> it <span class="token operator">=</span> aux_streams_storage_<span class="token punctuation">.</span><span class="token function">find</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span>it <span class="token operator">==</span> aux_streams_storage_<span class="token punctuation">.</span><span class="token function">end</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span>cudaStream_t<span class="token operator">></span> <span class="token function">streams</span><span class="token punctuation">(</span>num_streams<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">auto</span><span class="token operator">&amp;</span> s <span class="token operator">:</span> streams<span class="token punctuation">)</span> <span class="token function">cudaStreamCreate</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>s<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        aux_streams_storage_<span class="token punctuation">.</span><span class="token function">emplace</span><span class="token punctuation">(</span>name<span class="token punctuation">,</span> std<span class="token double-colon punctuation">::</span><span class="token function">move</span><span class="token punctuation">(</span>streams<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+    <span class="token keyword">return</span> it<span class="token operator">-></span>second<span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong><code>wait()</code> — 同步全部工作</strong></p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">wait</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token function">cudaStreamSynchronize</span><span class="token punctuation">(</span>lookup_stream_<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">cudaStreamSynchronize</span><span class="token punctuation">(</span>modify_stream_<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">auto</span><span class="token operator">&amp;</span> kv <span class="token operator">:</span> aux_streams_storage_<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">auto</span><span class="token operator">&amp;</span> stream <span class="token operator">:</span> kv<span class="token punctuation">.</span>second<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token function">cudaStreamSynchronize</span><span class="token punctuation">(</span>stream<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="使用模式"><a href="#使用模式" class="headerlink" title="使用模式"></a>使用模式</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 初始化阶段创建固定数量的上下文</span>
+std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span>context_ptr_t<span class="token operator">></span> contexts<span class="token punctuation">;</span>
+<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span> i <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span> i <span class="token operator">&lt;</span> num_threads<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    cudaStream_t ls<span class="token punctuation">,</span> ms<span class="token punctuation">;</span>
+    <span class="token function">cudaStreamCreate</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>ls<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">cudaStreamCreate</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>ms<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    contexts<span class="token punctuation">.</span><span class="token function">push_back</span><span class="token punctuation">(</span>layer<span class="token operator">-></span><span class="token function">create_execution_context</span><span class="token punctuation">(</span>ls<span class="token punctuation">,</span> ms<span class="token punctuation">,</span> thread_pool<span class="token punctuation">,</span> allocator<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">// 运行时循环使用</span>
+<span class="token keyword">int</span> ctx_idx <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">auto</span><span class="token operator">&amp;</span> batch <span class="token operator">:</span> batches<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">auto</span> ctx <span class="token operator">=</span> contexts<span class="token punctuation">[</span>ctx_idx<span class="token operator">++</span> <span class="token operator">%</span> contexts<span class="token punctuation">.</span><span class="token function">size</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    layer<span class="token operator">-></span><span class="token function">lookup</span><span class="token punctuation">(</span>ctx<span class="token punctuation">,</span> batch<span class="token punctuation">.</span>num_keys<span class="token punctuation">,</span> batch<span class="token punctuation">.</span>keys<span class="token punctuation">,</span> batch<span class="token punctuation">.</span>output<span class="token punctuation">,</span> <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">// 销毁前必须先释放所有上下文</span>
+contexts<span class="token punctuation">.</span><span class="token function">clear</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+layer<span class="token punctuation">.</span><span class="token function">reset</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="二、缓存管理"><a href="#二、缓存管理" class="headerlink" title="二、缓存管理"></a>二、缓存管理</h2><h3 id="Modify-操作与-ModifyContext"><a href="#Modify-操作与-ModifyContext" class="headerlink" title="Modify 操作与 ModifyContext"></a>Modify 操作与 ModifyContext</h3><p>所有改变缓存内容或驻留状态的操作（insert &#x2F; update &#x2F; update_accumulate &#x2F; erase &#x2F; clear）统称为 <strong>Modify 操作</strong>。每个 Modify 操作需要一个 <code>ModifyContext</code>——由 <code>EmbedCacheSA</code> 在 <code>modify_context_create()</code> 时分配，持有批量操作所需的临时缓冲区。</p>
+<p><strong>约束</strong>：GPU 端<strong>不支持多个 Modify 操作同时进行</strong>。用户必须确保 Modify 操作的串行化（例如通过单个 CUDA 流启动所有 Modify 操作）。NVE 的 Layer 层在内部通过 <code>kernel_launch_mutex_</code> + <code>modify_in_progress_</code> event + <code>private_modify_stream_</code> 实现了这个约束。</p>
+<h3 id="Invalidate-and-Commit-范式"><a href="#Invalidate-and-Commit-范式" class="headerlink" title="Invalidate and Commit 范式"></a>Invalidate and Commit 范式</h3><p>为了支持 <strong>Lookup 和 Modify 操作并行执行</strong>，NVE 采用”失效并提交”范式：</p>
+<pre class="line-numbers language-none"><code class="language-none">阶段 1 — Invalidate（失效）:
+  Modify 操作首先启动 CUDA kernel 将相关 cache 条目标记为&quot;失效中&quot;
+  → 后续 Lookup 对这些条目的访问会 miss（转到后备表读取）
+  ↓
+阶段 2 — Wait（等待）:
+  等待所有正在进行中的 Lookup 操作完成
+  → 通过 cudaEvent + cudaStreamWaitEvent 实现异步等待
+  → 通过 ContextRegistry 收集所有活跃的 lookup stream
+  ↓
+阶段 3 — Commit（提交）:
+  安全地修改缓存内容（写新数据、更新 tag）
+  重新启用失效的条目
+  → 后续 Lookup 可以命中新写入的数据<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="Custom-Flow-API"><a href="#Custom-Flow-API" class="headerlink" title="Custom Flow API"></a>Custom Flow API</h3><p>对于使用<strong>多个 CUDA kernel</strong> 实现自定义查找流程的用户，Invalidate and Commit 需要额外的协调。如果用户使用超过一个 kernel 的流水线实现查找，需要调用 <code>start_custom_flow()</code> &#x2F; <code>end_custom_flow()</code> API 来维持所需的原子性视图。</p>
+<h3 id="流同步细节"><a href="#流同步细节" class="headerlink" title="流同步细节"></a>流同步细节</h3><p><code>GPUTable</code> 中 update&#x2F;accumulate 操作的同步序列：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// Step 1: 等待所有进行中的查找完成</span>
+sync <span class="token operator">=</span> contexts_<span class="token operator">-></span><span class="token function">create_sync_event</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+sync<span class="token operator">-></span><span class="token function">event_record</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+sync<span class="token operator">-></span><span class="token function">event_wait_stream</span><span class="token punctuation">(</span>update_stream<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 此时所有 lookup stream 上的 work 已完成</span>
+
+<span class="token comment">// Step 2: 执行修改</span>
+<span class="token generic-function"><span class="token function">UpdateTable</span><span class="token generic class-name"><span class="token operator">&lt;</span>KeyType<span class="token operator">></span></span></span><span class="token punctuation">(</span><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span> <span class="token punctuation">,</span> update_stream<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// Step 3: 标记完成</span>
+<span class="token function">cudaEventRecord</span><span class="token punctuation">(</span>uvm_update_event<span class="token punctuation">,</span> update_stream<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">cudaStreamWaitEvent</span><span class="token punctuation">(</span>modify_stream<span class="token punctuation">,</span> uvm_update_event<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="三、插入启发式策略（InsertHeuristic）"><a href="#三、插入启发式策略（InsertHeuristic）" class="headerlink" title="三、插入启发式策略（InsertHeuristic）"></a>三、插入启发式策略（InsertHeuristic）</h2><h3 id="接口"><a href="#接口" class="headerlink" title="接口"></a>接口</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// include/insert_heuristic.hpp</span>
+<span class="token keyword">class</span> <span class="token class-name">InsertHeuristic</span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token keyword">virtual</span> <span class="token operator">~</span><span class="token function">InsertHeuristic</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token keyword">default</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> <span class="token keyword">bool</span> <span class="token function">insert_needed</span><span class="token punctuation">(</span><span class="token keyword">const</span> <span class="token keyword">float</span> hitrate<span class="token punctuation">,</span> <span class="token keyword">const</span> size_t table_id<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>hitrate</code> 是当前查找操作的命中率（范围 0.0 ~ 1.0），<code>table_id</code> 是层级中表的索引。返回值决定是否触发一次自动插入。</p>
+<h3 id="DefaultInsertHeuristic"><a href="#DefaultInsertHeuristic" class="headerlink" title="DefaultInsertHeuristic"></a>DefaultInsertHeuristic</h3><p>默认插入策略，使用<strong>阈值比较</strong>：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">DefaultInsertHeuristic</span> <span class="token operator">:</span> <span class="token base-clause"><span class="token keyword">public</span> <span class="token class-name">InsertHeuristic</span></span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token keyword">static</span> <span class="token keyword">constexpr</span> <span class="token keyword">float</span> DEFAULT_THRESHOLD <span class="token operator">=</span> <span class="token number">0.75f</span><span class="token punctuation">;</span>
+
+    <span class="token function">DefaultInsertHeuristic</span><span class="token punctuation">(</span><span class="token keyword">const</span> std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span><span class="token keyword">float</span><span class="token operator">></span> thresholds<span class="token punctuation">)</span> <span class="token operator">:</span> <span class="token function">thresholds_</span><span class="token punctuation">(</span>thresholds<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">bool</span> <span class="token function">insert_needed</span><span class="token punctuation">(</span><span class="token keyword">const</span> <span class="token keyword">float</span> hitrate<span class="token punctuation">,</span> <span class="token keyword">const</span> size_t table_id<span class="token punctuation">)</span> <span class="token keyword">override</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">if</span> <span class="token punctuation">(</span>hitrate <span class="token operator">>=</span> thresholds_<span class="token punctuation">.</span><span class="token function">at</span><span class="token punctuation">(</span>table_id<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+            <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span>  <span class="token comment">// 命中率足够高，不需要插入</span>
+        <span class="token punctuation">&#125;</span>
+        <span class="token comment">// 加入随机抖动，避免多表同步触发插入</span>
+        <span class="token keyword">return</span> <span class="token function">dis_</span><span class="token punctuation">(</span>gen_<span class="token punctuation">)</span> <span class="token operator">&lt;</span> <span class="token punctuation">(</span>thresholds_<span class="token punctuation">.</span><span class="token function">at</span><span class="token punctuation">(</span>table_id<span class="token punctuation">)</span> <span class="token operator">-</span> hitrate<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>关键细节：</p>
+<ul>
+<li><strong>随机抖动</strong>：<code>dis_(gen_) &lt; (threshold - hitrate)</code> 使得插入概率正比于命中率缺口。命中率远低于阈值时几乎必然触发插入，略低于阈值时概率较低。这避免了所有表同时触发插入导致的性能毛刺</li>
+<li><strong>层级默认阈值</strong>：对于 <code>HierarchicalEmbeddingLayer</code>，最后一张 host 表的阈值设为 0.0（永不触发自动插入，因为该层已有全量数据）</li>
+</ul>
+<h3 id="NeverInsertHeuristic"><a href="#NeverInsertHeuristic" class="headerlink" title="NeverInsertHeuristic"></a>NeverInsertHeuristic</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">NeverInsertHeuristic</span> <span class="token operator">:</span> <span class="token base-clause"><span class="token keyword">public</span> <span class="token class-name">InsertHeuristic</span></span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token keyword">bool</span> <span class="token function">insert_needed</span><span class="token punctuation">(</span><span class="token keyword">const</span> <span class="token keyword">float</span><span class="token punctuation">,</span> <span class="token keyword">const</span> size_t<span class="token punctuation">)</span> <span class="token keyword">override</span> <span class="token punctuation">&#123;</span> <span class="token keyword">return</span> <span class="token boolean">false</span><span class="token punctuation">;</span> <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>完全禁用自动插入。插入操作仅通过用户显式调用 <code>layer-&gt;insert()</code> 发生。</p>
+<h3 id="FSMInsertHeuristic"><a href="#FSMInsertHeuristic" class="headerlink" title="FSMInsertHeuristic"></a>FSMInsertHeuristic</h3><p>有限状态机驱动的插入策略，维护每张表的 <code>prev_hitrate_</code> 和 <code>state_</code>：</p>
+<pre class="line-numbers language-none"><code class="language-none">States: Start → Steady
+
+逻辑（从命名推断）:
+  Start: 初始状态，连续低命中率时触发插入
+  Steady: 稳定状态，根据命中率变化趋势决定是否插入<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>目前标注为 <code>// TODO: TRTREC-88</code>，可能尚未完成。</p>
+<h3 id="StatisticalInsertHeuristic"><a href="#StatisticalInsertHeuristic" class="headerlink" title="StatisticalInsertHeuristic"></a>StatisticalInsertHeuristic</h3><p>基于<strong>统计概率</strong>的插入策略，使用 Chebyshev 不等式判断命中率是否显著偏离期望：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">StatisticalInsertHeuristic</span> <span class="token operator">:</span> <span class="token base-clause"><span class="token keyword">public</span> <span class="token class-name">InsertHeuristic</span></span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 维护每个表的命中率滑动窗口（默认 14 个样本）</span>
+    std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span>std<span class="token double-colon punctuation">::</span>deque<span class="token operator">&lt;</span><span class="token keyword">float</span><span class="token operator">>></span> hitrate_window_<span class="token punctuation">;</span>
+    std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span><span class="token keyword">float</span><span class="token operator">></span> hitrate_mean_<span class="token punctuation">;</span>
+    std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span><span class="token keyword">float</span><span class="token operator">></span> hitrate_var_<span class="token punctuation">;</span>
+
+    <span class="token comment">// 使用切比雪夫不等式计算概率</span>
+    <span class="token keyword">float</span> <span class="token function">getChebyshevProb</span><span class="token punctuation">(</span><span class="token keyword">const</span> size_t table_id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// 状态机: Start → Insert → Steady → Unstable</span>
+    <span class="token keyword">enum</span> <span class="token keyword">class</span> <span class="token class-name">State</span> <span class="token punctuation">&#123;</span> Start<span class="token punctuation">,</span> Insert<span class="token punctuation">,</span> Steady<span class="token punctuation">,</span> Unstable <span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>工作机制</strong>：</p>
+<ol>
+<li>在每个查找操作后更新命中率的滑动窗口均值 <code>mean</code> 和方差 <code>var</code></li>
+<li>使用切比雪夫不等式计算当前命中率偏离均值的概率上限：<code>P(|X - μ| ≥ kσ) ≤ 1/k²</code></li>
+<li>如果概率超过阈值且偏离方向为负（命中率下降），触发插入</li>
+<li>状态机管理插入后的稳定期，避免频繁触发</li>
+</ol>
+<p>配置参数：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>默认值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>k_factor</code></td>
+<td>2.6</td>
+<td>标准差倍数因子。越大越不敏感，越小越容易触发插入</td>
+</tr>
+<tr>
+<td><code>window_size</code></td>
+<td>14</td>
+<td>滑动窗口大小，用于计算均值和方差</td>
+</tr>
+<tr>
+<td><code>num_inserts_needed</code></td>
+<td>50</td>
+<td>需要连续插入多少次才认为状态稳定</td>
+</tr>
+<tr>
+<td><code>max_unsteady_samples</code></td>
+<td>3</td>
+<td>允许的最大连续不稳定样本数</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="四、多设备与分布式支持"><a href="#四、多设备与分布式支持" class="headerlink" title="四、多设备与分布式支持"></a>四、多设备与分布式支持</h2><h3 id="多-GPU-共享线性表"><a href="#多-GPU-共享线性表" class="headerlink" title="多 GPU 共享线性表"></a>多 GPU 共享线性表</h3><p>当嵌入表跨多块 GPU 时，有两种方案：</p>
+<p><strong>方案 1：UVM 共享表（单节点多 GPU）</strong></p>
+<p>使用 <code>cudaMallocManaged</code> 分配 UVM 内存，通过 <code>cudaMemAdvise</code> 优化访问：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">void</span><span class="token operator">*</span> linear_table <span class="token operator">=</span> <span class="token keyword">nullptr</span><span class="token punctuation">;</span>
+<span class="token function">cudaMallocManaged</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>linear_table<span class="token punctuation">,</span> linear_table_size<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 建议 GPU 0 频繁访问此区域</span>
+<span class="token function">cudaMemAdvise</span><span class="token punctuation">(</span>linear_table<span class="token punctuation">,</span> linear_table_size<span class="token punctuation">,</span>
+              cudaMemAdviseSetAccessedBy<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// 将首选位置设为 CPU，保证所有 GPU 公平访问</span>
+<span class="token function">cudaMemAdvise</span><span class="token punctuation">(</span>linear_table<span class="token punctuation">,</span> linear_table_size<span class="token punctuation">,</span>
+              cudaMemAdviseSetPreferredLocation<span class="token punctuation">,</span> cudaCpuDeviceId<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>每个 GPU 创建独立的 <code>GpuTable</code>，共享同一个 <code>uvm_table</code> 指针：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">auto</span> gpu_tab1 <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>GpuTable<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">>></span></span></span><span class="token punctuation">(</span>cfg<span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// device 0</span>
+cfg<span class="token punctuation">.</span>device_id <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token keyword">auto</span> gpu_tab2 <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>GpuTable<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">>></span></span></span><span class="token punctuation">(</span>cfg<span class="token punctuation">)</span><span class="token punctuation">;</span>  <span class="token comment">// device 1</span>
+
+<span class="token comment">// 独立 GPU cache，共享 UVM 后备表</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>UVM 更新冲突通过 <code>disable_uvm_update</code> 控制——只需一个 <code>GpuTable</code> 负责 UVM 写入，其余只读。</p>
+<h3 id="CUDADistributedBuffer（多节点）"><a href="#CUDADistributedBuffer（多节点）" class="headerlink" title="CUDADistributedBuffer（多节点）"></a>CUDADistributedBuffer（多节点）</h3><p><code>CUDADistributedBuffer</code>（<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/include/distributed.hpp"><code>include/distributed.hpp</code></a>）在多节点场景下创建跨设备共享的 CUDA 虚拟地址映射缓冲区：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">CUDADistributedBuffer</span> <span class="token punctuation">&#123;</span>
+    std<span class="token double-colon punctuation">::</span>byte<span class="token operator">*</span> <span class="token function">ptr</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>          <span class="token comment">// 本地映射的缓冲区指针</span>
+    <span class="token keyword">uint64_t</span> <span class="token function">shard_size</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>     <span class="token comment">// 每个分片的大小</span>
+    <span class="token keyword">uint64_t</span> <span class="token function">num_shards</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>     <span class="token comment">// 总分片数 = world_size</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>初始化流程</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">init_single_host()  — 单节点多 GPU:
+  1. 每个 GPU 分配物理内存
+  2. 通过 CUDA Virtual Memory Management API
+     (cuMemCreate → cuMemMap → cuMemSetAccess)
+     将所有分片映射到所有 GPU 的虚拟地址空间
+  3. 每个 rank 通过 all_gather 交换分配句柄
+
+init_multi_host()  — 多节点:
+  1. 每节点分配本地 GPU 内存
+  2. 通过 DistributedEnv（MPI）交换句柄
+  3. 使用 NVLink&#x2F;NVSwitch 或网络实现跨节点访问<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="DistributedEnv"><a href="#DistributedEnv" class="headerlink" title="DistributedEnv"></a>DistributedEnv</h3><p>抽象了分布式环境接口：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>rank()</code></td>
+<td>当前进程编号</td>
+</tr>
+<tr>
+<td><code>world_size()</code></td>
+<td>总进程数</td>
+</tr>
+<tr>
+<td><code>device_count()</code></td>
+<td>每节点的 GPU 数</td>
+</tr>
+<tr>
+<td><code>local_device()</code></td>
+<td>当前进程的本地 GPU 编号</td>
+</tr>
+<tr>
+<td><code>single_host()</code></td>
+<td>是否单节点</td>
+</tr>
+<tr>
+<td><code>barrier()</code></td>
+<td>同步屏障</td>
+</tr>
+<tr>
+<td><code>broadcast()</code></td>
+<td>广播</td>
+</tr>
+<tr>
+<td><code>all_gather()</code></td>
+<td>全收集</td>
+</tr>
+</tbody></table>
+<p>Python 端通过 <code>pynve.nve.MPIMemBlock</code> 封装，使用 <code>mpi4py</code> 进行进程间通信。</p>
+<h3 id="实现细节：CUDA-Virtual-Memory"><a href="#实现细节：CUDA-Virtual-Memory" class="headerlink" title="实现细节：CUDA Virtual Memory"></a>实现细节：CUDA Virtual Memory</h3><p><code>CUDADistributedBuffer::init_single_host()</code> 使用 CUDA Virtual Memory Management API：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 1. 创建物理内存块</span>
+CUmemAllocationProp prop <span class="token operator">=</span> <span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+prop<span class="token punctuation">.</span>type <span class="token operator">=</span> CU_MEM_ALLOCATION_TYPE_PINNED<span class="token punctuation">;</span>
+prop<span class="token punctuation">.</span>location<span class="token punctuation">.</span>type <span class="token operator">=</span> CU_MEM_LOCATION_TYPE_DEVICE<span class="token punctuation">;</span>
+prop<span class="token punctuation">.</span>location<span class="token punctuation">.</span>id <span class="token operator">=</span> device_id<span class="token punctuation">;</span>
+<span class="token function">cuMemCreate</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>alloc_handle_<span class="token punctuation">,</span> shard_size_<span class="token punctuation">,</span> <span class="token operator">&amp;</span>prop<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 2. 映射到虚拟地址空间</span>
+<span class="token function">cuMemAddressReserve</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>ptr_<span class="token punctuation">,</span> total_size_<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">cuMemMap</span><span class="token punctuation">(</span>ptr_ <span class="token operator">+</span> i <span class="token operator">*</span> shard_size_<span class="token punctuation">,</span> shard_size_<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> alloc_handle_<span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 3. 设置访问权限</span>
+CUmemAccessDesc access <span class="token operator">=</span> <span class="token punctuation">&#123;</span><span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+access<span class="token punctuation">.</span>location<span class="token punctuation">.</span>type <span class="token operator">=</span> CU_MEM_LOCATION_TYPE_DEVICE<span class="token punctuation">;</span>
+access<span class="token punctuation">.</span>location<span class="token punctuation">.</span>id <span class="token operator">=</span> target_device_id<span class="token punctuation">;</span>
+access<span class="token punctuation">.</span>flags <span class="token operator">=</span> CU_MEM_ACCESS_FLAGS_PROT_READWRITE<span class="token punctuation">;</span>
+<span class="token function">cuMemSetAccess</span><span class="token punctuation">(</span>ptr_ <span class="token operator">+</span> i <span class="token operator">*</span> shard_size_<span class="token punctuation">,</span> shard_size_<span class="token punctuation">,</span> <span class="token operator">&amp;</span>access<span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>这种方式实现的是真正的<strong>跨 GPU 零拷贝共享</strong>——每块 GPU 通过自己的物理内存访问远端 GPU 的缓冲区，由 NVLink&#x2F;NVSwitch 提供硬件转发。</p>
+<hr>
+<h2 id="五、线程池（ThreadPool）"><a href="#五、线程池（ThreadPool）" class="headerlink" title="五、线程池（ThreadPool）"></a>五、线程池（ThreadPool）</h2><h3 id="接口-1"><a href="#接口-1" class="headerlink" title="接口"></a>接口</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// include/thread_pool_base.hpp</span>
+<span class="token keyword">class</span> <span class="token class-name">ThreadPool</span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token keyword">using</span> task_type <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span>function<span class="token operator">&lt;</span><span class="token keyword">void</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">using</span> result_type <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span>future<span class="token operator">&lt;</span><span class="token keyword">void</span><span class="token operator">></span><span class="token punctuation">;</span>
+
+    <span class="token keyword">virtual</span> result_type <span class="token function">submit</span><span class="token punctuation">(</span>task_type task<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>      <span class="token comment">// 提交单个任务</span>
+    <span class="token keyword">virtual</span> <span class="token keyword">void</span> <span class="token function">execute_n</span><span class="token punctuation">(</span><span class="token keyword">int64_t</span> workgroup<span class="token punctuation">,</span> <span class="token keyword">int64_t</span> num_tasks<span class="token punctuation">,</span>
+                           <span class="token keyword">const</span> std<span class="token double-colon punctuation">::</span>function<span class="token operator">&lt;</span><span class="token keyword">void</span><span class="token punctuation">(</span><span class="token keyword">int64_t</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token operator">&amp;</span> task<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>  <span class="token comment">// 批量并行</span>
+    <span class="token keyword">virtual</span> <span class="token keyword">int64_t</span> <span class="token function">num_workers</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">const</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="SimpleThreadPool"><a href="#SimpleThreadPool" class="headerlink" title="SimpleThreadPool"></a>SimpleThreadPool</h3><p><code>SimpleThreadPool</code>（<a href="https://github.com/NVIDIA/nv-embedding-cache/blob/main/src/thread_pool.cpp"><code>src/thread_pool.cpp</code></a>）是默认实现：</p>
+<ul>
+<li>创建时启动固定数量的 worker 线程</li>
+<li><code>submit()</code> 将任务加入工作队列，线程池竞争获取</li>
+<li><code>execute_n()</code> 批量提交索引化任务并等待全部完成，通过 <code>std::promise</code>&#x2F;<code>std::future</code> 同步</li>
+</ul>
+<p>核心用途：CPU 端 HostTable 的并行查找、默认嵌入填充、CPU UVM accumulate。</p>
+<h3 id="使用模式-1"><a href="#使用模式-1" class="headerlink" title="使用模式"></a>使用模式</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">thread_pool_ptr_t pool <span class="token operator">=</span> <span class="token function">create_thread_pool</span><span class="token punctuation">(</span><span class="token punctuation">&#123;</span><span class="token punctuation">&#123;</span><span class="token string">"num_workers"</span><span class="token punctuation">,</span> <span class="token number">16</span><span class="token punctuation">&#125;</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token keyword">const</span> <span class="token keyword">int64_t</span> num_tasks <span class="token operator">=</span> <span class="token punctuation">(</span>n <span class="token operator">+</span> chunk_size <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">/</span> chunk_size<span class="token punctuation">;</span>
+pool<span class="token operator">-></span><span class="token function">execute_n</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">,</span> num_tasks<span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token operator">&amp;</span><span class="token punctuation">]</span><span class="token punctuation">(</span><span class="token keyword">int64_t</span> idx<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">int64_t</span> start <span class="token operator">=</span> idx <span class="token operator">*</span> chunk_size<span class="token punctuation">;</span>
+    <span class="token keyword">int64_t</span> end <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token function">min</span><span class="token punctuation">(</span>start <span class="token operator">+</span> chunk_size<span class="token punctuation">,</span> n<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int64_t</span> i <span class="token operator">=</span> start<span class="token punctuation">;</span> i <span class="token operator">&lt;</span> end<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token function">process</span><span class="token punctuation">(</span>i<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token comment">// execute_n 在此处阻塞直到所有任务完成</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="六、分配器（Allocator）"><a href="#六、分配器（Allocator）" class="headerlink" title="六、分配器（Allocator）"></a>六、分配器（Allocator）</h2><h3 id="接口-2"><a href="#接口-2" class="headerlink" title="接口"></a>接口</h3><pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token keyword">class</span> <span class="token class-name">Allocator</span> <span class="token punctuation">&#123;</span>
+<span class="token keyword">public</span><span class="token operator">:</span>
+    <span class="token keyword">virtual</span> cudaError_t <span class="token function">device_allocate</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token operator">*</span> ptr<span class="token punctuation">,</span> size_t sz<span class="token punctuation">,</span> <span class="token keyword">int</span> device_id <span class="token operator">=</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token keyword">noexcept</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> cudaError_t <span class="token function">device_free</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span> ptr<span class="token punctuation">,</span> <span class="token keyword">int</span> device_id <span class="token operator">=</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span> <span class="token keyword">noexcept</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> cudaError_t <span class="token function">host_allocate</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span><span class="token operator">*</span> ptr<span class="token punctuation">,</span> size_t sz<span class="token punctuation">)</span> <span class="token keyword">noexcept</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> cudaError_t <span class="token function">host_free</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token operator">*</span> ptr<span class="token punctuation">)</span> <span class="token keyword">noexcept</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+    <span class="token keyword">virtual</span> cudaError_t <span class="token function">set_device</span><span class="token punctuation">(</span><span class="token keyword">int</span> device_id<span class="token punctuation">)</span> <span class="token keyword">noexcept</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="DefaultAllocator"><a href="#DefaultAllocator" class="headerlink" title="DefaultAllocator"></a>DefaultAllocator</h3><p><code>DefaultAllocator</code> 使用 <code>cudaMalloc</code> &#x2F; <code>cudaFree</code> 分配 GPU 内存，使用 <code>cudaMallocHost</code> &#x2F; <code>cudaFreeHost</code> 分配主机固定内存（page-locked memory，支持 GPU 直接访问）。</p>
+<p><strong>大页支持</strong>：对于大块主机内存分配（≥2MB），<code>DefaultAllocator</code> 会尝试使用 <code>mmap</code> 分配<strong>透明大页</strong>（Transparent Huge Pages），减少 TLB miss：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp">size_t <span class="token function">get_largest_hugepage_bits</span><span class="token punctuation">(</span>size_t alloc_size<span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// 检查 1GB 和 2MB 大页的可用数量</span>
+    <span class="token comment">// 返回足够支撑分配大小的最大页大小（bit 数）</span>
+    <span class="token comment">// 如 2MB = 21 bits, 1GB = 30 bits</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="七、AOTInductor-C-部署"><a href="#七、AOTInductor-C-部署" class="headerlink" title="七、AOTInductor C++ 部署"></a>七、AOTInductor C++ 部署</h2><h3 id="完整流程"><a href="#完整流程" class="headerlink" title="完整流程"></a>完整流程</h3><p>NVE 支持将包含 <code>NVEmbedding</code> &#x2F; <code>NVEmbeddingBag</code> 的 PyTorch 模型导出为<strong>无 Python 运行时</strong>的 C++ 可执行程序。流程分为两步：</p>
+<p><strong>Step 1 — Python 导出</strong></p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">from</span> pynve<span class="token punctuation">.</span>torch<span class="token punctuation">.</span>nve_export <span class="token keyword">import</span> export_aot
+
+model <span class="token operator">=</span> MyModel<span class="token punctuation">(</span><span class="token punctuation">)</span>
+export_aot<span class="token punctuation">(</span>model<span class="token punctuation">,</span> <span class="token punctuation">(</span>example_keys<span class="token punctuation">,</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"save_dir/"</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>生成的文件结构：</p>
+<pre class="line-numbers language-none"><code class="language-none">save_dir&#x2F;
+├── model.pt2              # AOTInductor 编译后的计算图
+├── metadata.json          # 每层配置（行数、维度、数据类型、cache 类型等）
+└── weights&#x2F;
+    ├── embedding_0.nve    # 嵌入权重二进制文件
+    └── embedding_1.nve<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><strong>Step 2 — C++ 加载与推理</strong></p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;torch/torch.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">&lt;torch/csrc/inductor/aoti_package/model_package_loader.h></span></span>
+<span class="token macro property"><span class="token directive-hash">#</span><span class="token directive keyword">include</span> <span class="token string">"python/pynve/torch_bindings/nve_loader.hpp"</span></span>
+
+<span class="token comment">// LayerDirectory 读取 metadata.json，创建嵌入层，加载权重</span>
+nve<span class="token double-colon punctuation">::</span>LayerDirectory <span class="token function">dir</span><span class="token punctuation">(</span><span class="token string">"save_dir/"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 加载 AOT 编译后的模型</span>
+torch<span class="token double-colon punctuation">::</span>inductor<span class="token double-colon punctuation">::</span>AOTIModelPackageLoader <span class="token function">loader</span><span class="token punctuation">(</span><span class="token string">"save_dir/model.pt2"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 推理（无 Python 运行时）</span>
+<span class="token keyword">auto</span> keys <span class="token operator">=</span> torch<span class="token double-colon punctuation">::</span><span class="token function">tensor</span><span class="token punctuation">(</span><span class="token punctuation">&#123;</span><span class="token number">0L</span><span class="token punctuation">,</span> <span class="token number">1L</span><span class="token punctuation">,</span> <span class="token number">5L</span><span class="token punctuation">,</span> <span class="token number">10L</span><span class="token punctuation">&#125;</span><span class="token punctuation">,</span>
+    torch<span class="token double-colon punctuation">::</span><span class="token function">TensorOptions</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">dtype</span><span class="token punctuation">(</span>torch<span class="token double-colon punctuation">::</span>kInt64<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">device</span><span class="token punctuation">(</span>torch<span class="token double-colon punctuation">::</span>kCUDA<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+c10<span class="token double-colon punctuation">::</span>InferenceMode mode<span class="token punctuation">;</span>
+<span class="token keyword">auto</span> outputs <span class="token operator">=</span> loader<span class="token punctuation">.</span><span class="token function">run</span><span class="token punctuation">(</span><span class="token punctuation">&#123;</span>keys<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="架构"><a href="#架构" class="headerlink" title="架构"></a>架构</h3><pre class="line-numbers language-none"><code class="language-none">Python 导出阶段:
+  PyTorch 模型 (NVEmbedding)
+    ↓ torch.export
+  ExportedProgram
+    ↓ AOTInductor compile
+  model.pt2 (so 文件 + nve_ops::embedding_lookup 算子)
+    + metadata.json + .nve weights
+
+C++ 推理阶段:
+  AOTIModelPackageLoader::run(&#123;keys&#125;)
+    ↓ C10 Dispatcher
+  nve_ops::embedding_lookup (STABLE_TORCH_LIBRARY)
+    ↓ NVELayerRegistry (单例)
+  LinearUVMEmbeddingLayer::lookup()
+    ↓
+  GPU Embedding Cache lookup<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h3 id="关键组件"><a href="#关键组件" class="headerlink" title="关键组件"></a>关键组件</h3><ul>
+<li><strong><code>libnve-torch-ops.so</code></strong>：注册自定义算子 <code>nve_ops::embedding_lookup</code> 到 C10 dispatcher，使用 <code>STABLE_TORCH_LIBRARY</code> 宏实现 LibTorch Stable ABI 兼容</li>
+<li><strong><code>NVELayerRegistry</code></strong>：全局单例，在 LayerDirectory 构造时将层 ID → 层指针的映射注册到 registry，AOT 模型通过层 ID 查找</li>
+<li><strong><code>LayerDirectory</code></strong>：RAII 类，构造函数创建层、加载权重、注册到 registry；析构函数注销并销毁</li>
+<li><strong><code>.nve</code> 权重格式</strong>：NVE 自定义二进制格式，包含层元数据头 + 嵌入向量数据，支持快速内存映射加载</li>
+</ul>
+<h3 id="链接要求"><a href="#链接要求" class="headerlink" title="链接要求"></a>链接要求</h3><pre class="line-numbers language-bash" data-language="bash"><code class="language-bash">g++ inference.cpp <span class="token parameter variable">-o</span> inference <span class="token punctuation">\</span>
+    -L/path/to/nve/build/lib -lnve-torch-ops -lnve-common <span class="token punctuation">\</span>
+    -L<span class="token variable"><span class="token variable">$(</span>python <span class="token parameter variable">-c</span> <span class="token string">"import torch; print(torch.utils.cmake_prefix_path)"</span><span class="token variable">)</span></span>/<span class="token punctuation">..</span>/lib <span class="token punctuation">\</span>
+    <span class="token parameter variable">-ltorch</span> <span class="token parameter variable">-ltorch_cpu</span> <span class="token parameter variable">-ltorch_cuda</span> <span class="token parameter variable">-lc10</span> <span class="token punctuation">\</span>
+    -Wl,-rpath,/path/to/nve/build/lib<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p><code>libnve-torch-ops.so</code> 构建条件：必须启用 torch bindings（默认），且 PyTorch ≥ 2.10（Stable ABI 兼容性通过 <code>cmake/check_torch_stable_abi.cpp</code> 验证）。</p>
+<hr>
+<h2 id="八、可插拔组件总结"><a href="#八、可插拔组件总结" class="headerlink" title="八、可插拔组件总结"></a>八、可插拔组件总结</h2><p>NVE 的三大可插拔基础设施：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>接口</th>
+<th>默认实现</th>
+<th>插件化方式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>ThreadPool</strong></td>
+<td><code>ThreadPool</code></td>
+<td><code>SimpleThreadPool</code></td>
+<td><code>create_thread_pool(json)</code> + <code>configure_default_thread_pool(json)</code></td>
+</tr>
+<tr>
+<td><strong>Allocator</strong></td>
+<td><code>Allocator</code></td>
+<td><code>DefaultAllocator</code>（cudaMalloc + 大页 mmap）</td>
+<td>构造函数参数传入</td>
+</tr>
+<tr>
+<td><strong>InsertHeuristic</strong></td>
+<td><code>InsertHeuristic</code></td>
+<td><code>DefaultInsertHeuristic</code>（阈值 0.75）</td>
+<td>Layer Config 传入</td>
+</tr>
+</tbody></table>
+<p><strong>使用示例</strong>：</p>
+<pre class="line-numbers language-cpp" data-language="cpp"><code class="language-cpp"><span class="token comment">// 自定义分配器</span>
+<span class="token keyword">class</span> <span class="token class-name">MyAllocator</span> <span class="token operator">:</span> <span class="token base-clause"><span class="token keyword">public</span> <span class="token class-name">Allocator</span></span> <span class="token punctuation">&#123;</span> <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span> <span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+<span class="token keyword">auto</span> allocator <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>MyAllocator<span class="token operator">></span></span></span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">auto</span> layer <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>GPUEmbeddingLayer<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">>></span></span></span><span class="token punctuation">(</span>config<span class="token punctuation">,</span> allocator<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 自定义线程池</span>
+<span class="token keyword">auto</span> pool <span class="token operator">=</span> <span class="token function">create_thread_pool</span><span class="token punctuation">(</span><span class="token punctuation">&#123;</span> <span class="token punctuation">&#123;</span><span class="token string">"num_workers"</span><span class="token punctuation">,</span> <span class="token number">32</span><span class="token punctuation">&#125;</span> <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token function">configure_default_thread_pool</span><span class="token punctuation">(</span><span class="token punctuation">&#123;</span> <span class="token punctuation">&#123;</span><span class="token string">"num_workers"</span><span class="token punctuation">,</span> <span class="token number">32</span><span class="token punctuation">&#125;</span> <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 自定义插入策略</span>
+<span class="token keyword">auto</span> heuristic <span class="token operator">=</span> std<span class="token double-colon punctuation">::</span><span class="token generic-function"><span class="token function">make_shared</span><span class="token generic class-name"><span class="token operator">&lt;</span>StatisticalInsertHeuristic<span class="token operator">></span></span></span><span class="token punctuation">(</span>
+    num_keys<span class="token punctuation">,</span> std<span class="token double-colon punctuation">::</span>vector<span class="token operator">&lt;</span><span class="token keyword">float</span><span class="token operator">></span><span class="token punctuation">&#123;</span><span class="token number">2.6f</span><span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+HierarchicalEmbeddingLayer<span class="token operator">&lt;</span><span class="token keyword">int64_t</span><span class="token operator">></span><span class="token double-colon punctuation">::</span>Config cfg<span class="token punctuation">;</span>
+cfg<span class="token punctuation">.</span>insert_heuristic <span class="token operator">=</span> heuristic<span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/NVIDIA/" rel="tag"># NVIDIA</a>
+              <a href="/tags/Embedding/" rel="tag"># Embedding</a>
+              <a href="/tags/AOTInductor/" rel="tag"># AOTInductor</a>
+              <a href="/tags/PyTorch/" rel="tag"># PyTorch</a>
+              <a href="/tags/%E5%A4%9AGPU/" rel="tag"># 多GPU</a>
+              <a href="/tags/CUDA/" rel="tag"># CUDA</a>
+              <a href="/tags/%E7%BA%BF%E7%A8%8B%E6%B1%A0/" rel="tag"># 线程池</a>
+              <a href="/tags/NVEmbeddingCache/" rel="tag"># NVEmbeddingCache</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/c7d29735.html" rel="prev" title="plugin-system">
+                  <i class="fa fa-angle-left"></i> plugin-system
+                </a>
+            </div>
+            <div class="post-nav-item">
+                <a href="/posts/96878a9b.html" rel="next" title="multi-gpu-deep">
+                  multi-gpu-deep <i class="fa fa-angle-right"></i>
+                </a>
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-user"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">phantom9999</span>
+  </div>
+  <div class="powered-by">由 <span class="exturl" data-url="aHR0cHM6Ly9oZXhvLmlv">Hexo</span> & <span class="exturl" data-url="aHR0cHM6Ly90aGVtZS1uZXh0LmpzLm9yZw==">NexT.Gemini</span> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="reading-progress-bar"></div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/live2d-widget@^3.1.3/lib/L2Dwidget.min.js"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":true,"model":{"jsonPath":"https://cdn.jsdelivr.net/npm/live2d-widget-model-haruto@1.0.5/assets/haruto.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true}});</script></body>
+</html>
